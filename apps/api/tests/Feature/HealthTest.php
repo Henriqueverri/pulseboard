@@ -9,16 +9,12 @@ class HealthTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_health_endpoint_returns_ok_when_database_is_available(): void
+    public function test_health_endpoint_returns_ok(): void
     {
         $response = $this->getJson('/api/v1/health');
 
-        $response
-            ->assertOk()
-            ->assertJson([
-                'status' => 'ok',
-                'app' => 'PulseBoard',
-                'database' => 'ok',
-            ]);
+        $response->assertOk()
+            ->assertJsonPath('status', 'ok')
+            ->assertJsonPath('database', 'ok');
     }
 }

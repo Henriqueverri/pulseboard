@@ -2,14 +2,14 @@
 
 SaaS de analytics para pequenos negócios acompanharem vendas, receita, clientes e indicadores em um dashboard.
 
-Este repositório é um monorepo de portfólio full stack. A **Fase 1 (Foundation)** entrega a estrutura local; autenticação, domínio e dashboard virão nas fases seguintes.
+Este repositório é um monorepo de portfólio full stack. A **Fase 2 (Auth + Organization)** entrega autenticação Sanctum SPA (cookie) e multi-tenancy por Organization.
 
 ## Stack
 
 | Camada | Tecnologia |
 |--------|------------|
-| Frontend | Nuxt 4, Vue 3, TypeScript, Tailwind CSS |
-| Backend | Laravel 12, PHP 8.2+, API REST |
+| Frontend | Nuxt 4, Vue 3, TypeScript, Tailwind CSS, Pinia |
+| Backend | Laravel 12, PHP 8.2+, API REST, Sanctum SPA |
 | Banco | PostgreSQL 16 |
 | Package FE | bun |
 | Infra local | Docker Compose (somente Postgres no MVP) |
@@ -26,8 +26,6 @@ pulseboard/
 ├── README.md
 └── .gitignore
 ```
-
-Não há packages compartilhados nesta fase.
 
 ## Pré-requisitos
 
@@ -65,16 +63,7 @@ php artisan serve --host=127.0.0.1 --port=8000
 
 - API: http://localhost:8000  
 - Health: http://localhost:8000/api/v1/health  
-
-Resposta esperada:
-
-```json
-{
-  "status": "ok",
-  "app": "PulseBoard",
-  "database": "ok"
-}
-```
+- CSRF: http://localhost:8000/sanctum/csrf-cookie  
 
 ### 3. Frontend (Nuxt)
 
@@ -86,26 +75,31 @@ bun run dev
 ```
 
 - Frontend: http://localhost:3000  
+- Login: http://localhost:3000/login  
+- Register: http://localhost:3000/register  
 
-A página inicial consulta o health da API usando `NUXT_PUBLIC_API_URL`.
+## Autenticação (Sanctum SPA)
+
+Fluxo cookie httpOnly + CSRF (sem token no `localStorage`):
+
+1. `GET /sanctum/csrf-cookie` (`credentials: include`)
+2. `POST /api/v1/auth/register` ou `/login`
+3. Requests seguintes com cookie de sessão
+4. Contexto de tenant via header `X-Organization-Id` (contexto apenas; autorização = membership)
 
 ## Variáveis de ambiente
 
 | Arquivo | Uso |
 |---------|-----|
-| `apps/api/.env.example` | Template da API (Postgres, `FRONTEND_URL`, CORS) |
-| `apps/web/.env.example` | Template do front (`NUXT_PUBLIC_API_URL`, `NUXT_PUBLIC_API_ORIGIN`) |
+| `apps/api/.env.example` | API, Postgres, `FRONTEND_URL`, `SANCTUM_STATEFUL_DOMAINS` |
+| `apps/web/.env.example` | `NUXT_PUBLIC_API_URL`, `NUXT_PUBLIC_API_ORIGIN` |
 
 Não commite arquivos `.env` com secrets.
-
-## CORS (preparação)
-
-A API permite origem `FRONTEND_URL` (default `http://localhost:3000`) com `supports_credentials=true`, alinhado à autenticação Sanctum SPA prevista nas próximas fases.
 
 ## Status do projeto
 
 - [x] Fase 1 — Foundation  
-- [ ] Fase 2 — Authentication  
+- [x] Fase 2 — Authentication  
 - [ ] Fase 3 — Core domain  
 - [ ] Fase 4 — API de negócio  
 - [ ] Fase 5 — Frontend de produto  

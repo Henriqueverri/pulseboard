@@ -8,7 +8,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | FRONTEND_URL must be an explicit origin (not *) when credentials are used.
-    | Prepared for Sanctum SPA cookie auth in a later phase.
+    | Required for Sanctum SPA cookie authentication.
     |
     */
 

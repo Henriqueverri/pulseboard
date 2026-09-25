@@ -2,7 +2,7 @@
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
-  modules: ['@nuxtjs/tailwindcss'],
+  modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt'],
   runtimeConfig: {
     public: {
       // Overridden by NUXT_PUBLIC_API_URL / NUXT_PUBLIC_API_ORIGIN
