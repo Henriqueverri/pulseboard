@@ -1,0 +1,54 @@
+# Local Cursor / plan files
+.cursor/
+
+# Dependencies
+**/node_modules/
+**/vendor/
+
+# Environment (never commit secrets)
+**/.env
+**/.env.local
+**/.env.*.local
+!.env.example
+!**/.env.example
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Nuxt / Node build
+apps/web/.nuxt/
+apps/web/.output/
+apps/web/.data/
+apps/web/.nitro/
+apps/web/.cache/
+apps/web/dist/
+
+# Laravel
+apps/api/storage/*.key
+apps/api/storage/pail/
+apps/api/storage/logs/*
+apps/api/storage/framework/cache/*
+apps/api/storage/framework/sessions/*
+apps/api/storage/framework/views/*
+!apps/api/storage/logs/.gitignore
+!apps/api/storage/framework/cache/.gitignore
+!apps/api/storage/framework/sessions/.gitignore
+!apps/api/storage/framework/views/.gitignore
+apps/api/bootstrap/cache/*.php
+!apps/api/bootstrap/cache/.gitignore
+apps/api/public/hot
+apps/api/public/storage
+apps/api/database/*.sqlite
+apps/api.phpunit.result.cache
+apps/api/.phpunit.cache/
+
+# Docker
+.docker-data/
