@@ -19,6 +19,8 @@ class Organization extends Model
 
     public const ROLE_MEMBER = 'member';
 
+    public const DEFAULT_TIMEZONE = 'America/Sao_Paulo';
+
     /**
      * @var list<string>
      */
@@ -26,6 +28,14 @@ class Organization extends Model
         'name',
         'slug',
         'currency',
+        'timezone',
+    ];
+
+    /**
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'timezone' => self::DEFAULT_TIMEZONE,
     ];
 
     /**

@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\TransactionStatus;
 use App\Exceptions\CrossOrganizationReferenceException;
 use App\Models\Concerns\BelongsToOrganization;
+use App\Support\Analytics\ReportingPeriod;
 use App\Support\Money;
 use Database\Factories\TransactionFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -73,6 +74,29 @@ class Transaction extends Model
     public function items(): HasMany
     {
         return $this->hasMany(TransactionItem::class);
+    }
+
+    /**
+     * The single definition of a sale: financial and commercial metrics
+     * (revenue, orders, units sold, average order value, total spent) count only paid transactions.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    public function scopePaid(Builder $query): Builder
+    {
+        return $query->where($this->qualifyColumn('status'), TransactionStatus::Paid->value);
+    }
+
+    /**
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    public function scopeOccurredWithin(Builder $query, ReportingPeriod $period): Builder
+    {
+        return $query
+            ->where($this->qualifyColumn('occurred_at'), '>=', $period->startUtc())
+            ->where($this->qualifyColumn('occurred_at'), '<', $period->endUtc());
     }
 
     /**

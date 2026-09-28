@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Enums\TransactionStatus;
 use App\Models\Customer;
 use App\Models\Transaction;
 use App\Support\Money;
@@ -23,7 +22,7 @@ class CustomerMetricsService
         $totals = Transaction::query()
             ->forOrganization($customer->organization_id)
             ->where('customer_id', $customer->id)
-            ->where('status', TransactionStatus::Paid->value)
+            ->paid()
             ->toBase()
             ->selectRaw('count(*) as orders_count')
             ->selectRaw('coalesce(sum(total_amount), 0) as total_spent')

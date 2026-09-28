@@ -154,10 +154,11 @@ class TransactionApiTest extends TestCase
             ->assertJsonPath('data.*.id', [$mine->id]);
     }
 
-    public function test_index_filters_by_from_inclusive_start_of_day(): void
+    public function test_index_filters_by_from_inclusive_start_of_day_in_organization_timezone(): void
     {
-        $this->createTransaction($this->customer, [[$this->product, 1, '10.00']], occurredAt: '2026-09-09 23:59:59');
-        $startOfDay = $this->createTransaction($this->customer, [[$this->product, 1, '10.00']], occurredAt: '2026-09-10 00:00:00');
+        // America/Sao_Paulo is UTC-3: Sep 10th starts at 03:00 UTC.
+        $this->createTransaction($this->customer, [[$this->product, 1, '10.00']], occurredAt: '2026-09-10 02:59:59');
+        $startOfDay = $this->createTransaction($this->customer, [[$this->product, 1, '10.00']], occurredAt: '2026-09-10 03:00:00');
         $later = $this->createTransaction($this->customer, [[$this->product, 1, '10.00']], occurredAt: '2026-09-15 12:00:00');
 
         $this->listTransactions('from=2026-09-10')
@@ -165,15 +166,60 @@ class TransactionApiTest extends TestCase
             ->assertJsonPath('data.*.id', [$later->id, $startOfDay->id]);
     }
 
-    public function test_index_filters_by_to_inclusive_end_of_day(): void
+    public function test_index_filters_by_to_inclusive_end_of_day_in_organization_timezone(): void
     {
         $earlier = $this->createTransaction($this->customer, [[$this->product, 1, '10.00']], occurredAt: '2026-09-05 08:00:00');
-        $endOfDay = $this->createTransaction($this->customer, [[$this->product, 1, '10.00']], occurredAt: '2026-09-10 23:59:59');
-        $this->createTransaction($this->customer, [[$this->product, 1, '10.00']], occurredAt: '2026-09-11 00:00:00');
+        $endOfDay = $this->createTransaction($this->customer, [[$this->product, 1, '10.00']], occurredAt: '2026-09-11 02:59:59');
+        $this->createTransaction($this->customer, [[$this->product, 1, '10.00']], occurredAt: '2026-09-11 03:00:00');
 
         $this->listTransactions('to=2026-09-10')
             ->assertOk()
             ->assertJsonPath('data.*.id', [$endOfDay->id, $earlier->id]);
+    }
+
+    public function test_evening_sale_in_sao_paulo_belongs_to_its_local_day(): void
+    {
+        // 23:30 on Sep 10th in São Paulo is 02:30 UTC on Sep 11th.
+        $evening = $this->createTransaction($this->customer, [[$this->product, 1, '10.00']], occurredAt: '2026-09-11 02:30:00');
+
+        $this->listTransactions('from=2026-09-10&to=2026-09-10')
+            ->assertOk()
+            ->assertJsonPath('data.*.id', [$evening->id]);
+
+        $this->listTransactions('from=2026-09-11&to=2026-09-11')
+            ->assertOk()
+            ->assertJsonPath('data', []);
+    }
+
+    public function test_date_filters_follow_each_organization_timezone(): void
+    {
+        $this->organization->update(['timezone' => 'Europe/Lisbon']);
+
+        // Lisbon is UTC+1 in September: Sep 10th spans 2026-09-09 23:00 → 2026-09-10 23:00 UTC.
+        $this->createTransaction($this->customer, [[$this->product, 1, '10.00']], occurredAt: '2026-09-09 22:59:59');
+        $first = $this->createTransaction($this->customer, [[$this->product, 1, '10.00']], occurredAt: '2026-09-09 23:00:00');
+        $last = $this->createTransaction($this->customer, [[$this->product, 1, '10.00']], occurredAt: '2026-09-10 22:59:59');
+        $this->createTransaction($this->customer, [[$this->product, 1, '10.00']], occurredAt: '2026-09-10 23:00:00');
+
+        $this->listTransactions('from=2026-09-10&to=2026-09-10')
+            ->assertOk()
+            ->assertJsonPath('data.*.id', [$last->id, $first->id]);
+
+        $this->organization->update(['timezone' => 'UTC']);
+
+        $this->listTransactions('from=2026-09-10&to=2026-09-10')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonMissing(['id' => $first->id]);
+    }
+
+    public function test_timezone_cannot_be_chosen_by_the_client(): void
+    {
+        $evening = $this->createTransaction($this->customer, [[$this->product, 1, '10.00']], occurredAt: '2026-09-11 02:30:00');
+
+        $this->listTransactions('from=2026-09-10&to=2026-09-10&timezone=UTC')
+            ->assertOk()
+            ->assertJsonPath('data.*.id', [$evening->id]);
     }
 
     public function test_index_combines_from_and_to(): void

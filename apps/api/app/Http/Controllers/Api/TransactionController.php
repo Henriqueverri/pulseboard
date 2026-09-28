@@ -23,14 +23,16 @@ class TransactionController extends Controller
     {
         $this->authorize('viewAny', Transaction::class);
 
+        $timezone = $current->organization->timezone;
+
         $transactions = $current->organization->transactions()
             ->with('customer:id,name,email,deleted_at')
             ->withCount('items')
             ->when($request->validated('status'), fn ($query, string $status) => $query->where('status', $status))
             ->when($request->validated('customer_id'), fn ($query, string $id) => $query->where('customer_id', $id))
             ->when($request->validated('q'), fn ($query, string $term) => $query->search($term))
-            ->when($request->occurredFrom(), fn ($query, $from) => $query->where('occurred_at', '>=', $from))
-            ->when($request->occurredBefore(), fn ($query, $before) => $query->where('occurred_at', '<', $before))
+            ->when($request->occurredFrom($timezone), fn ($query, $from) => $query->where('occurred_at', '>=', $from))
+            ->when($request->occurredBefore($timezone), fn ($query, $before) => $query->where('occurred_at', '<', $before))
             ->orderByDesc('occurred_at')
             ->orderByDesc('id')
             ->paginate($request->perPage())

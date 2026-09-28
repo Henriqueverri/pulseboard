@@ -114,7 +114,7 @@ No MVP, Transactions são registros históricos (gerados pelo seed) e **não pod
 | `status` | `paid`, `refunded`, `pending`, `canceled` | Sem filtro, todos os status são retornados |
 | `q` | texto | UUID → match exato no id da transaction; outro texto → nome ou e-mail do customer (case-insensitive) |
 | `customer_id` | UUID | Customer de outra organização resulta em lista vazia |
-| `from` / `to` | `YYYY-MM-DD` | `from` = início do dia, `to` = fim do dia (UTC); `from` > `to` → 422 |
+| `from` / `to` | `YYYY-MM-DD` | Dias do calendário na timezone da Organization (`organizations.timezone`, padrão `America/Sao_Paulo`): `from` = início do dia, `to` = fim do dia; `from` > `to` → 422 |
 | `page` / `per_page` | inteiro | `per_page` 1–100, padrão 15 |
 
 Ordenação: `occurred_at` desc, depois `id` desc. A listagem traz `customer` e `items_count`; o detalhe traz `customer` e `items` com `product`. Customers/products soft-deleted continuam aparecendo no histórico com `is_deleted: true`. `unit_price` é o preço no momento da venda.

@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Transaction;
 
 use App\Enums\TransactionStatus;
+use App\Support\Analytics\ReportingPeriod;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -55,22 +56,23 @@ class IndexTransactionRequest extends FormRequest
     }
 
     /**
-     * Start of the `from` day (inclusive), in the application timezone.
+     * UTC instant at which the `from` day starts in the organization's timezone (inclusive).
      */
-    public function occurredFrom(): ?CarbonImmutable
+    public function occurredFrom(string $timezone): ?CarbonImmutable
     {
         $from = $this->validated('from');
 
-        return $from === null ? null : CarbonImmutable::createFromFormat('!Y-m-d', $from);
+        return $from === null ? null : ReportingPeriod::dayStartUtc($from, $timezone);
     }
 
     /**
-     * Start of the day after `to` (exclusive), so the whole `to` day is included.
+     * UTC instant at which the day after `to` starts in the organization's timezone
+     * (exclusive), so the whole `to` day is included.
      */
-    public function occurredBefore(): ?CarbonImmutable
+    public function occurredBefore(string $timezone): ?CarbonImmutable
     {
         $to = $this->validated('to');
 
-        return $to === null ? null : CarbonImmutable::createFromFormat('!Y-m-d', $to)->addDay();
+        return $to === null ? null : ReportingPeriod::dayEndUtc($to, $timezone);
     }
 }

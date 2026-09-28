@@ -21,6 +21,7 @@ class OrganizationResource extends JsonResource
             'name' => $this->name,
             'slug' => $this->slug,
             'currency' => $this->currency,
+            'timezone' => $this->timezone,
             'role' => $this->when(
                 isset($this->pivot?->role),
                 fn () => $this->pivot->role,

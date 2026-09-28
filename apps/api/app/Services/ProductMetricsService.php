@@ -2,10 +2,10 @@
 
 namespace App\Services;
 
-use App\Enums\TransactionStatus;
 use App\Models\Product;
 use App\Models\TransactionItem;
 use App\Support\Money;
+use Illuminate\Database\Eloquent\Builder;
 
 class ProductMetricsService
 {
@@ -17,10 +17,10 @@ class ProductMetricsService
     public function for(Product $product): array
     {
         $totals = TransactionItem::query()
-            ->join('transactions', 'transactions.id', '=', 'transaction_items.transaction_id')
             ->where('transaction_items.product_id', $product->id)
-            ->where('transactions.organization_id', $product->organization_id)
-            ->where('transactions.status', TransactionStatus::Paid->value)
+            ->whereHas('transaction', fn (Builder $transaction) => $transaction
+                ->forOrganization($product->organization_id)
+                ->paid())
             ->toBase()
             ->selectRaw('coalesce(sum(transaction_items.quantity), 0) as units_sold')
             ->selectRaw('coalesce(sum(transaction_items.line_total), 0) as revenue')

@@ -24,6 +24,12 @@ class OrganizationFactory extends Factory
             'name' => $name,
             'slug' => Str::slug($name).'-'.Str::lower(Str::random(6)),
             'currency' => 'BRL',
+            'timezone' => Organization::DEFAULT_TIMEZONE,
         ];
+    }
+
+    public function timezone(string $timezone): static
+    {
+        return $this->state(['timezone' => $timezone]);
     }
 }
