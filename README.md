@@ -213,6 +213,49 @@ Accept: application/json
 
 Os KPIs saem de uma única consulta agregada no banco. Limitações conhecidas: o status é o estado atual da transação (um estorno remove a receita da data original da venda) e o período padrão inclui o dia de hoje ainda em andamento.
 
+### Revenue analytics
+
+`GET /api/v1/analytics/revenue` devolve a série temporal da receita (somente transações `paid`) no calendário da Organization.
+
+| Parâmetro | Formato | Regra |
+|-----------|---------|-------|
+| `from` / `to` | `YYYY-MM-DD` | Mesmas regras do Dashboard (juntos, máx. 366 dias, padrão últimos 30 dias, timezone da Organization) |
+| `granularity` | `day`, `week`, `month` | Padrão `day`; outro valor → 422 |
+
+- **Buckets:** `day` = cada dia; `week` = semana ISO (segunda a domingo); `month` = mês do calendário. `bucket` é o primeiro dia local do bucket (numa semana parcial pode ser anterior a `from`); `from` / `to` são os dias efetivamente cobertos, recortados ao período — o primeiro e o último bucket podem ser parciais. Uma granularidade maior que o período gera um único bucket parcial.
+- **Todos os buckets do período são retornados**, em ordem cronológica; sem vendas → `"revenue": "0.00"`, `"orders": 0`. A receita é agregada no banco (`GROUP BY` do bucket local) e os buckets vazios são preenchidos na aplicação, sem consultas extras.
+- **Timezone:** uma venda em `2026-09-01T02:59:59Z` pertence ao dia `2026-08-31` em `America/Sao_Paulo`. No PostgreSQL a conversão usa a base de timezones (DST exato).
+- **`summary`:** `revenue` e `orders` do período comparados ao anterior, com a mesma definição e formato do `/dashboard` (soma dos buckets = `summary.revenue.value` = `dashboard.revenue.value`).
+
+```http
+GET /api/v1/analytics/revenue?from=2026-09-02&to=2026-09-16&granularity=week
+X-Organization-Id: {organization-uuid}
+Accept: application/json
+```
+
+```json
+{
+  "data": [
+    { "bucket": "2026-08-31", "from": "2026-09-02", "to": "2026-09-06", "revenue": "1250.00", "orders": 14 },
+    { "bucket": "2026-09-07", "from": "2026-09-07", "to": "2026-09-13", "revenue": "0.00", "orders": 0 },
+    { "bucket": "2026-09-14", "from": "2026-09-14", "to": "2026-09-16", "revenue": "830.40", "orders": 9 }
+  ],
+  "summary": {
+    "revenue": { "value": "2080.40", "previous": "1904.10", "change": 9.3 },
+    "orders": { "value": 23, "previous": 21, "change": 9.5 }
+  },
+  "meta": {
+    "period": { "from": "2026-09-02", "to": "2026-09-16", "days": 15 },
+    "previous_period": { "from": "2026-08-18", "to": "2026-09-01", "days": 15 },
+    "timezone": "America/Sao_Paulo",
+    "currency": "BRL",
+    "granularity": "week"
+  }
+}
+```
+
+Duas consultas agregadas por request (série + resumo), independentemente do volume ou do número de buckets. Limitações: as mesmas do Dashboard (status atual, dia de hoje parcial). A suíte de testes rápida roda em SQLite, que não tem timezones: lá o bucket usa o offset fixo do início do período (exato para `America/Sao_Paulo`); os testes de DST rodam só no PostgreSQL.
+
 ## Variáveis de ambiente
 
 | Arquivo | Uso |
@@ -227,7 +270,7 @@ Não commite arquivos `.env` com secrets.
 - [x] Fase 1 — Foundation  
 - [x] Fase 2 — Authentication  
 - [x] Fase 3 — Core domain  
-- [ ] Fase 4 — API de negócio (4A Products + Customers, 4B Transactions, 4C.1 timezone + fundação de analytics e 4C.2 Dashboard KPIs concluídas; Analytics detalhado pendente)  
+- [ ] Fase 4 — API de negócio (4A Products + Customers, 4B Transactions, 4C.1 timezone + fundação de analytics, 4C.2 Dashboard KPIs e 4C.3 Revenue analytics concluídas; analytics de produtos, clientes e status pendentes)  
 - [ ] Fase 5 — Frontend de produto  
 - [ ] Fase 6 — Tests  
 - [ ] Fase 7 — CI/CD  

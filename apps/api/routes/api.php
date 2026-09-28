@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Analytics\RevenueAnalyticsController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\DashboardController;
@@ -27,6 +28,10 @@ Route::prefix('v1')->group(function (): void {
     Route::middleware(['auth:sanctum', 'organization'])->group(function (): void {
         Route::get('/organization', [OrganizationController::class, 'show']);
         Route::get('/dashboard', DashboardController::class);
+
+        Route::prefix('analytics')->group(function (): void {
+            Route::get('/revenue', RevenueAnalyticsController::class);
+        });
 
         Route::apiResource('products', ProductController::class);
         Route::apiResource('customers', CustomerController::class);
