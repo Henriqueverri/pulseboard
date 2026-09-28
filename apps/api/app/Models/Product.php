@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\ProductStatus;
 use App\Models\Concerns\BelongsToOrganization;
 use Database\Factories\ProductFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -28,6 +29,13 @@ class Product extends Model
     ];
 
     /**
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'status' => 'active',
+    ];
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array
@@ -44,5 +52,32 @@ class Product extends Model
     public function transactionItems(): HasMany
     {
         return $this->hasMany(TransactionItem::class);
+    }
+
+    /**
+     * Case-insensitive match on name or SKU.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    public function scopeSearch(Builder $query, string $term): Builder
+    {
+        return $query->where(fn (Builder $query) => $query
+            ->whereLike($this->qualifyColumn('name'), "%{$term}%")
+            ->orWhereLike($this->qualifyColumn('sku'), "%{$term}%"));
+    }
+
+    public function hasSalesHistory(): bool
+    {
+        return $this->transactionItems()->exists();
+    }
+
+    /**
+     * Products referenced by transaction items are soft deleted so sales history
+     * keeps its product; products that were never sold are removed permanently.
+     */
+    public function deletePreservingHistory(): void
+    {
+        $this->hasSalesHistory() ? $this->delete() : $this->forceDelete();
     }
 }

@@ -4,6 +4,7 @@ use App\Http\Middleware\EnsureOrganizationContext;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Routing\Middleware\SubstituteBindings;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -18,6 +19,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'organization' => EnsureOrganizationContext::class,
         ]);
+
+        // Tenant-scoped route model binding needs the organization context resolved first.
+        $middleware->prependToPriorityList(
+            before: SubstituteBindings::class,
+            prepend: EnsureOrganizationContext::class,
+        );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
