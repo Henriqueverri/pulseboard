@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\Analytics\CustomerAnalyticsController;
 use App\Http\Controllers\Api\Analytics\ProductAnalyticsController;
 use App\Http\Controllers\Api\Analytics\RevenueAnalyticsController;
+use App\Http\Controllers\Api\Analytics\TransactionStatusAnalyticsController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\DashboardController;
@@ -35,6 +36,7 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/revenue', RevenueAnalyticsController::class);
             Route::get('/products', ProductAnalyticsController::class);
             Route::get('/customers', CustomerAnalyticsController::class);
+            Route::get('/transactions', TransactionStatusAnalyticsController::class);
         });
 
         Route::apiResource('products', ProductController::class);

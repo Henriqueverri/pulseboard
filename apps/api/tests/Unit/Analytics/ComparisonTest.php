@@ -34,4 +34,20 @@ class ComparisonTest extends TestCase
         $this->assertSame(['value' => null, 'previous' => '10.00', 'change' => null], Comparison::ofMoney(null, 1000)->jsonSerialize());
         $this->assertSame(['value' => '10.00', 'previous' => null, 'change' => null], Comparison::ofMoney(1000, null)->jsonSerialize());
     }
+
+    public function test_percentages_are_one_decimal_floats_with_relative_change(): void
+    {
+        $this->assertSame(['value' => 65.3, 'previous' => 61.8, 'change' => 5.7], Comparison::ofPercentages(653, 618)->jsonSerialize());
+        $this->assertSame(['value' => 50.0, 'previous' => 100.0, 'change' => -50.0], Comparison::ofPercentages(500, 1000)->jsonSerialize());
+        $this->assertSame(0.0, Comparison::ofPercentages(250, 250)->change);
+        $this->assertSame('{"value":50.0,"previous":0.0,"change":null}', json_encode(Comparison::ofPercentages(500, 0), JSON_PRESERVE_ZERO_FRACTION));
+    }
+
+    public function test_zero_and_undefined_percentages(): void
+    {
+        $this->assertSame(['value' => 0.0, 'previous' => 0.0, 'change' => 0.0], Comparison::ofPercentages(0, 0)->jsonSerialize());
+        $this->assertSame(-100.0, Comparison::ofPercentages(0, 300)->change);
+        $this->assertSame(['value' => null, 'previous' => 40.0, 'change' => null], Comparison::ofPercentages(null, 400)->jsonSerialize());
+        $this->assertSame(['value' => null, 'previous' => null, 'change' => null], Comparison::ofPercentages(null, null)->jsonSerialize());
+    }
 }

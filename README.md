@@ -390,6 +390,69 @@ Sem clientes ou sem vendas: `"data": []` e contadores `{ "value": 0, "previous":
 
 Quatro consultas agregadas por request (ranking com os dados do cliente via join, primeira compra/novos/recorrentes, base de clientes e KPIs do Dashboard), independentemente do número de clientes ou de `limit` — sem N+1. A consulta de primeira compra percorre o histórico pago da organização até o fim do período. Limitações: as mesmas do Dashboard (status atual, dia de hoje parcial). O seed de demonstração não tem clientes excluídos e cadastra todos os clientes antes do histórico de vendas, então nele `total_customers` fica estável; essas regras são cobertas por testes com dados controlados.
 
+### Transaction status analytics
+
+`GET /api/v1/analytics/transactions` devolve a distribuição das transações do período por status, comparada ao período anterior. Aceita apenas `from` / `to` (mesmas regras do Dashboard: juntos, máx. 366 dias, padrão últimos 30 dias, timezone da Organization).
+
+Este endpoint é a **exceção documentada à regra de venda `paid`**: conta transações de todos os status. Cada item de `data` traz `status` e três métricas no formato `{ value, previous, change }`:
+
+| Métrica | Definição |
+|---------|-----------|
+| `orders` | Quantidade de transações do status no período (transações, não itens) |
+| `revenue` | `SUM(total_amount)` das transações do status, em string com 2 casas. Só a linha `paid` é receita no sentido do Dashboard; nas demais é o valor movimentado naquele status |
+| `percentage` | Participação do status no total de transações do período, com 1 casa decimal (float). Sem transações no período → `null`. `change` é a variação relativa entre os percentuais exibidos (65.3 vs 61.8 → 5.7), `null` se algum lado é `null` ou o anterior é zero |
+
+- **Ordem fixa e completa:** sempre os 4 status, na ordem `paid`, `refunded`, `pending`, `canceled`; status sem transações aparece zerado.
+- **Consistência:** a linha `paid` tem `orders` e `revenue` idênticos ao `/dashboard` do mesmo período; a soma de `orders` dos 4 status é igual a `meta.total` de `GET /transactions?from&to`. Por arredondamento, a soma dos percentuais pode ficar em 100.0 ± 0.2.
+- **Status atual:** a transação conta no status que tem hoje e na data de `occurred_at` (um reembolso de uma venda antiga continua no período da venda original).
+
+```http
+GET /api/v1/analytics/transactions?from=2026-09-01&to=2026-09-30
+X-Organization-Id: {organization-uuid}
+Accept: application/json
+```
+
+```json
+{
+  "data": [
+    {
+      "status": "paid",
+      "orders": { "value": 2, "previous": 1, "change": 100.0 },
+      "revenue": { "value": "150.00", "previous": "100.00", "change": 50.0 },
+      "percentage": { "value": 50.0, "previous": 50.0, "change": 0.0 }
+    },
+    {
+      "status": "refunded",
+      "orders": { "value": 1, "previous": 0, "change": null },
+      "revenue": { "value": "30.00", "previous": "0.00", "change": null },
+      "percentage": { "value": 25.0, "previous": 0.0, "change": null }
+    },
+    {
+      "status": "pending",
+      "orders": { "value": 1, "previous": 0, "change": null },
+      "revenue": { "value": "20.00", "previous": "0.00", "change": null },
+      "percentage": { "value": 25.0, "previous": 0.0, "change": null }
+    },
+    {
+      "status": "canceled",
+      "orders": { "value": 0, "previous": 1, "change": -100.0 },
+      "revenue": { "value": "0.00", "previous": "40.00", "change": -100.0 },
+      "percentage": { "value": 0.0, "previous": 50.0, "change": -100.0 }
+    }
+  ],
+  "meta": {
+    "period": { "from": "2026-09-01", "to": "2026-09-30", "days": 30 },
+    "previous_period": { "from": "2026-08-02", "to": "2026-08-31", "days": 30 },
+    "timezone": "America/Sao_Paulo",
+    "currency": "BRL"
+  }
+}
+```
+
+Sem transações em um período: os 4 status com `orders` 0, `revenue` `"0.00"` e `percentage` `null` naquele período.
+
+Uma única consulta agregada por request (agrupada por status, período anterior via `CASE`), sem acessar itens nem clientes. Fronteiras calculadas na aplicação (sem buckets): SQLite e PostgreSQL idênticos, DST incluído.
+
 ## Variáveis de ambiente
 
 | Arquivo | Uso |
@@ -404,7 +467,7 @@ Não commite arquivos `.env` com secrets.
 - [x] Fase 1 — Foundation  
 - [x] Fase 2 — Authentication  
 - [x] Fase 3 — Core domain  
-- [ ] Fase 4 — API de negócio (4A Products + Customers, 4B Transactions, 4C.1 timezone + fundação de analytics, 4C.2 Dashboard KPIs, 4C.3 Revenue analytics, 4C.4 Product analytics e 4C.5 Customer analytics concluídas; analytics de status pendente)  
+- [ ] Fase 4 — API de negócio (4A Products + Customers, 4B Transactions, 4C.1 timezone + fundação de analytics, 4C.2 Dashboard KPIs, 4C.3 Revenue analytics, 4C.4 Product analytics, 4C.5 Customer analytics e 4C.6 Transaction status analytics concluídas)  
 - [ ] Fase 5 — Frontend de produto  
 - [ ] Fase 6 — Tests  
 - [ ] Fase 7 — CI/CD  
