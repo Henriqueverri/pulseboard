@@ -256,6 +256,71 @@ Accept: application/json
 
 Duas consultas agregadas por request (série + resumo), independentemente do volume ou do número de buckets. Limitações: as mesmas do Dashboard (status atual, dia de hoje parcial). A suíte de testes rápida roda em SQLite, que não tem timezones: lá o bucket usa o offset fixo do início do período (exato para `America/Sao_Paulo`); os testes de DST rodam só no PostgreSQL.
 
+### Product analytics
+
+`GET /api/v1/analytics/products` devolve o ranking dos produtos vendidos no período (somente transações `paid`), cada um comparado ao período anterior.
+
+| Parâmetro | Formato | Regra |
+|-----------|---------|-------|
+| `from` / `to` | `YYYY-MM-DD` | Mesmas regras do Dashboard (juntos, máx. 366 dias, padrão últimos 30 dias, timezone da Organization) |
+| `sort` | `revenue`, `units_sold` | Padrão `revenue`; outro valor → 422 |
+| `limit` | inteiro 1–50 | Padrão 10; fora da faixa → 422. Sem paginação |
+
+- **Receita do produto:** `SUM(line_total)` dos itens pagos, ou seja, o preço no momento da venda (alterar `price` depois não muda o histórico). **Unidades:** `SUM(quantity)`.
+- **Entra no ranking** o produto com ao menos uma venda paga no período atual. Produto vendido só no período anterior não aparece em `data`, mas conta em `summary.*.previous`.
+- **Ordenação:** `sort=revenue` → receita, unidades, nome, id; `sort=units_sold` → unidades, receita, nome, id. `rank` começa em 1.
+- **Produtos soft-deleted e `inactive`** com vendas continuam no ranking (`is_deleted: true` / `status: "inactive"`); compras de clientes soft-deleted também contam.
+- **`summary` não depende de `limit`:** considera todos os produtos vendidos. `revenue` é o mesmo objeto do `/dashboard` (soma do ranking completo = `summary.revenue.value` = `dashboard.revenue.value`); `units_sold` e `products_sold` (produtos distintos) no mesmo formato `{ value, previous, change }`.
+- **Timezone:** só os limites do período dependem da timezone da Organization; eles são calculados na aplicação e convertidos para UTC (DST exato também no SQLite).
+
+```http
+GET /api/v1/analytics/products?from=2026-09-01&to=2026-09-30&sort=revenue&limit=3
+X-Organization-Id: {organization-uuid}
+Accept: application/json
+```
+
+```json
+{
+  "data": [
+    {
+      "rank": 1,
+      "product": { "id": "9d1a…", "name": "Mesa regulável Essential", "sku": "PB-013-ESS", "status": "active", "is_deleted": false },
+      "revenue": { "value": "4649.70", "previous": "3099.80", "change": 50.0 },
+      "units_sold": { "value": 3, "previous": 2, "change": 50.0 }
+    },
+    {
+      "rank": 2,
+      "product": { "id": "9d1b…", "name": "Monitor 24\" Pro", "sku": "PB-010-PRO", "status": "active", "is_deleted": false },
+      "revenue": { "value": "2099.80", "previous": "0.00", "change": null },
+      "units_sold": { "value": 2, "previous": 0, "change": null }
+    },
+    {
+      "rank": 3,
+      "product": { "id": "9d1c…", "name": "Mouse sem fio Essential", "sku": "PB-001-ESS", "status": "inactive", "is_deleted": true },
+      "revenue": { "value": "799.00", "previous": "639.20", "change": 25.0 },
+      "units_sold": { "value": 10, "previous": 8, "change": 25.0 }
+    }
+  ],
+  "summary": {
+    "revenue": { "value": "8120.40", "previous": "6650.30", "change": 22.1 },
+    "units_sold": { "value": 31, "previous": 26, "change": 19.2 },
+    "products_sold": { "value": 7, "previous": 6, "change": 16.7 }
+  },
+  "meta": {
+    "period": { "from": "2026-09-01", "to": "2026-09-30", "days": 30 },
+    "previous_period": { "from": "2026-08-02", "to": "2026-08-31", "days": 30 },
+    "timezone": "America/Sao_Paulo",
+    "currency": "BRL",
+    "sort": "revenue",
+    "limit": 3
+  }
+}
+```
+
+Sem vendas no período: `"data": []` e `summary` zerado (`change: 0.0` se o anterior também é zero, `null` se só o anterior é zero).
+
+Três consultas agregadas por request (ranking com os dados do produto via join, totais de itens e KPIs do Dashboard), independentemente do número de produtos ou de `limit` — sem N+1. Limitações: as mesmas do Dashboard (status atual, dia de hoje parcial).
+
 ## Variáveis de ambiente
 
 | Arquivo | Uso |
@@ -270,7 +335,7 @@ Não commite arquivos `.env` com secrets.
 - [x] Fase 1 — Foundation  
 - [x] Fase 2 — Authentication  
 - [x] Fase 3 — Core domain  
-- [ ] Fase 4 — API de negócio (4A Products + Customers, 4B Transactions, 4C.1 timezone + fundação de analytics, 4C.2 Dashboard KPIs e 4C.3 Revenue analytics concluídas; analytics de produtos, clientes e status pendentes)  
+- [ ] Fase 4 — API de negócio (4A Products + Customers, 4B Transactions, 4C.1 timezone + fundação de analytics, 4C.2 Dashboard KPIs, 4C.3 Revenue analytics e 4C.4 Product analytics concluídas; analytics de clientes e status pendentes)  
 - [ ] Fase 5 — Frontend de produto  
 - [ ] Fase 6 — Tests  
 - [ ] Fase 7 — CI/CD  
