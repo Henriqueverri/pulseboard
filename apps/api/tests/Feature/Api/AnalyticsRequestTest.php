@@ -2,18 +2,16 @@
 
 namespace Tests\Feature\Api;
 
-use App\Http\Requests\Analytics\AnalyticsRequest;
 use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Api\Concerns\InteractsWithOrganizationApi;
 use Tests\TestCase;
 
 /**
- * Exercises the shared period request through a test-only route until the analytics endpoints exist.
+ * Exercises the shared AnalyticsRequest period rules through the dashboard endpoint.
  */
 class AnalyticsRequestTest extends TestCase
 {
@@ -26,19 +24,6 @@ class AnalyticsRequestTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-
-        Route::middleware(['api', 'auth:sanctum', 'organization'])
-            ->get('/api/testing/analytics-period', function (AnalyticsRequest $request) {
-                $period = $request->period();
-
-                return [
-                    'from' => $period->from(),
-                    'to' => $period->to(),
-                    'timezone' => $period->timezone,
-                    'start_utc' => $period->startUtc()->toIso8601String(),
-                    'end_utc' => $period->endUtc()->toIso8601String(),
-                ];
-            });
 
         $this->organization = Organization::factory()->create();
         $this->owner = $this->memberOf($this->organization);
@@ -55,13 +40,8 @@ class AnalyticsRequestTest extends TestCase
     {
         $this->period('from=2026-09-01&to=2026-09-30')
             ->assertOk()
-            ->assertExactJson([
-                'from' => '2026-09-01',
-                'to' => '2026-09-30',
-                'timezone' => 'America/Sao_Paulo',
-                'start_utc' => '2026-09-01T03:00:00+00:00',
-                'end_utc' => '2026-10-01T03:00:00+00:00',
-            ]);
+            ->assertJsonPath('meta.period', ['from' => '2026-09-01', 'to' => '2026-09-30', 'days' => 30])
+            ->assertJsonPath('meta.timezone', 'America/Sao_Paulo');
     }
 
     public function test_defaults_to_the_last_30_days_ending_today_in_the_organization_timezone(): void
@@ -71,16 +51,15 @@ class AnalyticsRequestTest extends TestCase
 
         $this->period()
             ->assertOk()
-            ->assertJsonPath('from', '2026-09-01')
-            ->assertJsonPath('to', '2026-09-30');
+            ->assertJsonPath('meta.period.from', '2026-09-01')
+            ->assertJsonPath('meta.period.to', '2026-09-30');
     }
 
     public function test_timezone_query_parameter_is_ignored(): void
     {
         $this->period('from=2026-09-01&to=2026-09-01&timezone=UTC')
             ->assertOk()
-            ->assertJsonPath('timezone', 'America/Sao_Paulo')
-            ->assertJsonPath('start_utc', '2026-09-01T03:00:00+00:00');
+            ->assertJsonPath('meta.timezone', 'America/Sao_Paulo');
     }
 
     public function test_organization_id_is_prohibited(): void
@@ -119,17 +98,17 @@ class AnalyticsRequestTest extends TestCase
     public function test_requires_authentication_and_membership(): void
     {
         $this->withHeader('X-Organization-Id', $this->organization->id)
-            ->getJson('/api/testing/analytics-period')
+            ->getJson('/api/v1/dashboard')
             ->assertUnauthorized();
 
         $this->actingInOrganization($this->owner, Organization::factory()->create())
-            ->getJson('/api/testing/analytics-period')
+            ->getJson('/api/v1/dashboard')
             ->assertForbidden();
     }
 
     private function period(string $query = ''): TestResponse
     {
         return $this->actingInOrganization($this->owner, $this->organization)
-            ->getJson('/api/testing/analytics-period'.($query === '' ? '' : "?{$query}"));
+            ->getJson('/api/v1/dashboard'.($query === '' ? '' : "?{$query}"));
     }
 }

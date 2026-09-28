@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CustomerController;
+use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\ProductController;
@@ -25,6 +26,7 @@ Route::prefix('v1')->group(function (): void {
 
     Route::middleware(['auth:sanctum', 'organization'])->group(function (): void {
         Route::get('/organization', [OrganizationController::class, 'show']);
+        Route::get('/dashboard', DashboardController::class);
 
         Route::apiResource('products', ProductController::class);
         Route::apiResource('customers', CustomerController::class);

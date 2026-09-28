@@ -165,6 +165,54 @@ Accept: application/json
 }
 ```
 
+### Dashboard
+
+`GET /api/v1/dashboard` devolve os KPIs do período, cada um comparado ao período anterior.
+
+| Parâmetro | Formato | Regra |
+|-----------|---------|-------|
+| `from` / `to` | `YYYY-MM-DD` | Dias do calendário na timezone da Organization; informados juntos; `to` ≥ `from`; no máximo 366 dias. Sem os dois, últimos 30 dias incluindo hoje |
+
+- A timezone vem sempre de `organizations.timezone` (padrão `America/Sao_Paulo`); não existe parâmetro `timezone`. Os limites do período são convertidos para UTC antes da consulta (o banco guarda UTC).
+- `organization_id` na query → 422. O tenant vem do header `X-Organization-Id` (membership validada).
+- Período anterior: mesmo número de dias, imediatamente antes de `from` (ex.: `01/09–30/09` compara com `02/08–31/08`).
+
+**KPIs** — consideram **somente transações `paid`** com `occurred_at` dentro do período:
+
+| KPI | Definição | Tipo |
+|-----|-----------|------|
+| `revenue` | `SUM(total_amount)` | string decimal (`"0.00"` sem vendas) |
+| `orders` | quantidade de transações pagas | inteiro |
+| `average_order_value` | `revenue / orders`, arredondado ao centavo (half-up) | string decimal; `null` quando `orders = 0` |
+| `customers` | clientes distintos com ao menos uma transação paga no período (inclui clientes soft-deleted que compraram) | inteiro |
+
+**Comparação** — cada KPI é `{ "value", "previous", "change" }`. `change` é a variação percentual (número com 1 casa decimal, `22.5` = +22,5%): `0.0` quando atual e anterior são zero; `null` quando o anterior é zero e o atual não, ou quando algum valor é `null`.
+
+```http
+GET /api/v1/dashboard?from=2026-09-01&to=2026-09-30
+X-Organization-Id: {organization-uuid}
+Accept: application/json
+```
+
+```json
+{
+  "data": {
+    "revenue": { "value": "12500.00", "previous": "10200.00", "change": 22.5 },
+    "orders": { "value": 98, "previous": 81, "change": 21.0 },
+    "average_order_value": { "value": "127.55", "previous": "125.93", "change": 1.3 },
+    "customers": { "value": 52, "previous": 47, "change": 10.6 }
+  },
+  "meta": {
+    "period": { "from": "2026-09-01", "to": "2026-09-30", "days": 30 },
+    "previous_period": { "from": "2026-08-02", "to": "2026-08-31", "days": 30 },
+    "timezone": "America/Sao_Paulo",
+    "currency": "BRL"
+  }
+}
+```
+
+Os KPIs saem de uma única consulta agregada no banco. Limitações conhecidas: o status é o estado atual da transação (um estorno remove a receita da data original da venda) e o período padrão inclui o dia de hoje ainda em andamento.
+
 ## Variáveis de ambiente
 
 | Arquivo | Uso |
@@ -179,7 +227,7 @@ Não commite arquivos `.env` com secrets.
 - [x] Fase 1 — Foundation  
 - [x] Fase 2 — Authentication  
 - [x] Fase 3 — Core domain  
-- [ ] Fase 4 — API de negócio (4A Products + Customers e 4B Transactions concluídas; Dashboard/Analytics pendente)  
+- [ ] Fase 4 — API de negócio (4A Products + Customers, 4B Transactions, 4C.1 timezone + fundação de analytics e 4C.2 Dashboard KPIs concluídas; Analytics detalhado pendente)  
 - [ ] Fase 5 — Frontend de produto  
 - [ ] Fase 6 — Tests  
 - [ ] Fase 7 — CI/CD  
