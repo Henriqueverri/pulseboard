@@ -57,9 +57,11 @@ Credenciais padrão (apenas local):
 cd apps/api
 cp .env.example .env   # se ainda não existir
 php artisan key:generate
-php artisan migrate
+php artisan migrate:fresh --seed
 php artisan serve --host=127.0.0.1 --port=8000
 ```
+
+`migrate:fresh --seed` recria o banco local do zero com o dataset de demonstração (1 organização, 40 produtos, 70 clientes, ~440 transações em 90 dias). Usuários: `test@example.com` (owner) e `member@example.com` (member), senha `password`.
 
 - API: http://localhost:8000  
 - Health: http://localhost:8000/api/v1/health  
@@ -100,7 +102,7 @@ Não commite arquivos `.env` com secrets.
 
 - [x] Fase 1 — Foundation  
 - [x] Fase 2 — Authentication  
-- [ ] Fase 3 — Core domain  
+- [x] Fase 3 — Core domain  
 - [ ] Fase 4 — API de negócio  
 - [ ] Fase 5 — Frontend de produto  
 - [ ] Fase 6 — Tests  
