@@ -321,6 +321,75 @@ Sem vendas no período: `"data": []` e `summary` zerado (`change: 0.0` se o ante
 
 Três consultas agregadas por request (ranking com os dados do produto via join, totais de itens e KPIs do Dashboard), independentemente do número de produtos ou de `limit` — sem N+1. Limitações: as mesmas do Dashboard (status atual, dia de hoje parcial).
 
+### Customer analytics
+
+`GET /api/v1/analytics/customers` devolve os indicadores da base de clientes e o ranking dos clientes que mais compraram no período, tudo comparado ao período anterior.
+
+| Parâmetro | Formato | Regra |
+|-----------|---------|-------|
+| `from` / `to` | `YYYY-MM-DD` | Mesmas regras do Dashboard (juntos, máx. 366 dias, padrão últimos 30 dias, timezone da Organization) |
+| `sort` | `revenue`, `orders` | Padrão `revenue`; outro valor → 422 |
+| `limit` | inteiro 1–50 | Padrão 10; fora da faixa → 422. Sem paginação |
+
+**Summary** — cada métrica no formato `{ value, previous, change }`, sempre sobre todos os clientes (independe de `limit`):
+
+| Métrica | Definição |
+|---------|-----------|
+| `total_customers` | Clientes cadastrados até o fim do período (`created_at` anterior ao fim do dia `to` local) e não excluídos até esse instante. Um cliente excluído depois do fim continua contando naquele período. Para um período que termina hoje, igual a `meta.total` de `GET /customers` |
+| `active_customers` | Clientes distintos com ao menos uma transação `paid` no período — o mesmo valor de `customers` no `/dashboard` |
+| `new_customers` | Clientes ativos cuja **primeira transação `paid` de todo o histórico** ocorreu no período (independe da data de cadastro) |
+| `returning_customers` | Clientes ativos que já tinham transação `paid` antes do início do período |
+
+`new_customers + returning_customers = active_customers` (em `value` e em `previous`). Transações `pending`, `refunded` e `canceled` não geram atividade nem contam como primeira compra.
+
+**Ranking** — clientes com ao menos uma transação `paid` no período; `revenue` = `SUM(total_amount)` e `orders` = quantidade de transações pagas (mesmas definições do Dashboard e de `total_spent` / `orders_count` em `GET /customers/{id}`). Ordenação: `sort=revenue` → receita, pedidos, nome, id; `sort=orders` → pedidos, receita, nome, id.
+
+- **Soft delete:** o histórico não some. Compras de clientes excluídos continuam em `active`, `new`, `returning` e no ranking (`is_deleted: true`); a exclusão só tira o cliente de `total_customers` a partir do instante em que ocorreu.
+- **Timezone:** as fronteiras (atividade, primeira compra, cadastro e exclusão) são os limites dos dias no calendário da Organization, calculados na aplicação e convertidos para UTC (DST exato também no SQLite). Ex.: uma primeira compra em `2026-09-01T02:30:00Z` é de agosto em `America/Sao_Paulo` (cliente recorrente em setembro) e de setembro em `Europe/Lisbon` (cliente novo).
+
+```http
+GET /api/v1/analytics/customers?from=2026-09-01&to=2026-09-30&sort=revenue&limit=2
+X-Organization-Id: {organization-uuid}
+Accept: application/json
+```
+
+```json
+{
+  "data": [
+    {
+      "rank": 1,
+      "customer": { "id": "9d1b…", "name": "Maria Souza", "email": "maria@example.com", "is_deleted": false },
+      "revenue": { "value": "1250.00", "previous": "1000.00", "change": 25.0 },
+      "orders": { "value": 2, "previous": 1, "change": 100.0 }
+    },
+    {
+      "rank": 2,
+      "customer": { "id": "9d1c…", "name": "João Lima", "email": "joao@example.com", "is_deleted": true },
+      "revenue": { "value": "480.00", "previous": "0.00", "change": null },
+      "orders": { "value": 1, "previous": 0, "change": null }
+    }
+  ],
+  "summary": {
+    "total_customers": { "value": 72, "previous": 70, "change": 2.9 },
+    "active_customers": { "value": 52, "previous": 47, "change": 10.6 },
+    "new_customers": { "value": 6, "previous": 9, "change": -33.3 },
+    "returning_customers": { "value": 46, "previous": 38, "change": 21.1 }
+  },
+  "meta": {
+    "period": { "from": "2026-09-01", "to": "2026-09-30", "days": 30 },
+    "previous_period": { "from": "2026-08-02", "to": "2026-08-31", "days": 30 },
+    "timezone": "America/Sao_Paulo",
+    "currency": "BRL",
+    "sort": "revenue",
+    "limit": 2
+  }
+}
+```
+
+Sem clientes ou sem vendas: `"data": []` e contadores `{ "value": 0, "previous": 0, "change": 0.0 }` (`total_customers` conta os cadastrados mesmo sem compras).
+
+Quatro consultas agregadas por request (ranking com os dados do cliente via join, primeira compra/novos/recorrentes, base de clientes e KPIs do Dashboard), independentemente do número de clientes ou de `limit` — sem N+1. A consulta de primeira compra percorre o histórico pago da organização até o fim do período. Limitações: as mesmas do Dashboard (status atual, dia de hoje parcial). O seed de demonstração não tem clientes excluídos e cadastra todos os clientes antes do histórico de vendas, então nele `total_customers` fica estável; essas regras são cobertas por testes com dados controlados.
+
 ## Variáveis de ambiente
 
 | Arquivo | Uso |
@@ -335,7 +404,7 @@ Não commite arquivos `.env` com secrets.
 - [x] Fase 1 — Foundation  
 - [x] Fase 2 — Authentication  
 - [x] Fase 3 — Core domain  
-- [ ] Fase 4 — API de negócio (4A Products + Customers, 4B Transactions, 4C.1 timezone + fundação de analytics, 4C.2 Dashboard KPIs, 4C.3 Revenue analytics e 4C.4 Product analytics concluídas; analytics de clientes e status pendentes)  
+- [ ] Fase 4 — API de negócio (4A Products + Customers, 4B Transactions, 4C.1 timezone + fundação de analytics, 4C.2 Dashboard KPIs, 4C.3 Revenue analytics, 4C.4 Product analytics e 4C.5 Customer analytics concluídas; analytics de status pendente)  
 - [ ] Fase 5 — Frontend de produto  
 - [ ] Fase 6 — Tests  
 - [ ] Fase 7 — CI/CD  

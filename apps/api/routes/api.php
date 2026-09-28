@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Analytics\CustomerAnalyticsController;
 use App\Http\Controllers\Api\Analytics\ProductAnalyticsController;
 use App\Http\Controllers\Api\Analytics\RevenueAnalyticsController;
 use App\Http\Controllers\Api\AuthController;
@@ -33,6 +34,7 @@ Route::prefix('v1')->group(function (): void {
         Route::prefix('analytics')->group(function (): void {
             Route::get('/revenue', RevenueAnalyticsController::class);
             Route::get('/products', ProductAnalyticsController::class);
+            Route::get('/customers', CustomerAnalyticsController::class);
         });
 
         Route::apiResource('products', ProductController::class);
