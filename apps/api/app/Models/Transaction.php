@@ -7,11 +7,13 @@ use App\Exceptions\CrossOrganizationReferenceException;
 use App\Models\Concerns\BelongsToOrganization;
 use App\Support\Money;
 use Database\Factories\TransactionFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class Transaction extends Model
 {
@@ -71,6 +73,26 @@ class Transaction extends Model
     public function items(): HasMany
     {
         return $this->hasMany(TransactionItem::class);
+    }
+
+    /**
+     * A UUID term matches the transaction id exactly; any other term is a
+     * case-insensitive match on the customer's name or email (soft-deleted customers included).
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    public function scopeSearch(Builder $query, string $term): Builder
+    {
+        if (Str::isUuid($term)) {
+            return $query->whereKey(Str::lower($term));
+        }
+
+        return $query->whereHas('customer', fn (Builder $customer) => $customer->where(
+            fn (Builder $customer) => $customer
+                ->whereLike($customer->qualifyColumn('name'), "%{$term}%")
+                ->orWhereLike($customer->qualifyColumn('email'), "%{$term}%")
+        ));
     }
 
     public function recalculateTotal(): void

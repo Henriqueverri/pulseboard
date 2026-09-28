@@ -105,6 +105,66 @@ Rotas de domínio exigem sessão autenticada + `X-Organization-Id` de uma organi
 - `DELETE` é restrito a `owner`. Sem histórico (nenhuma venda/transação) o registro é removido; com histórico é feito soft delete e as transações permanecem intactas.
 - SKU e e-mail são únicos por organização **incluindo registros soft-deleted** (o índice único não é parcial). E-mails são normalizados para minúsculas.
 
+### Transactions (read-only)
+
+No MVP, Transactions são registros históricos (gerados pelo seed) e **não podem ser criadas, alteradas ou removidas pela API** — só existem `GET /transactions` e `GET /transactions/{id}`; outros métodos retornam 405.
+
+| Filtro | Formato | Regra |
+|--------|---------|-------|
+| `status` | `paid`, `refunded`, `pending`, `canceled` | Sem filtro, todos os status são retornados |
+| `q` | texto | UUID → match exato no id da transaction; outro texto → nome ou e-mail do customer (case-insensitive) |
+| `customer_id` | UUID | Customer de outra organização resulta em lista vazia |
+| `from` / `to` | `YYYY-MM-DD` | `from` = início do dia, `to` = fim do dia (UTC); `from` > `to` → 422 |
+| `page` / `per_page` | inteiro | `per_page` 1–100, padrão 15 |
+
+Ordenação: `occurred_at` desc, depois `id` desc. A listagem traz `customer` e `items_count`; o detalhe traz `customer` e `items` com `product`. Customers/products soft-deleted continuam aparecendo no histórico com `is_deleted: true`. `unit_price` é o preço no momento da venda.
+
+```http
+GET /api/v1/transactions?status=paid&from=2026-09-01&to=2026-09-30&q=maria&per_page=20
+X-Organization-Id: {organization-uuid}
+Accept: application/json
+```
+
+```json
+{
+  "data": [
+    {
+      "id": "9d1c…",
+      "status": "paid",
+      "total_amount": "159.50",
+      "occurred_at": "2026-09-15T14:32:00.000000Z",
+      "items_count": 2,
+      "customer": { "id": "9d1b…", "name": "Maria Souza", "email": "maria@example.com", "is_deleted": false }
+    }
+  ],
+  "links": { "first": "…?page=1", "last": "…?page=1", "prev": null, "next": null },
+  "meta": { "current_page": 1, "per_page": 20, "total": 1, "last_page": 1 }
+}
+```
+
+`GET /api/v1/transactions/{id}`:
+
+```json
+{
+  "data": {
+    "id": "9d1c…",
+    "status": "paid",
+    "total_amount": "159.50",
+    "occurred_at": "2026-09-15T14:32:00.000000Z",
+    "customer": { "id": "9d1b…", "name": "Maria Souza", "email": "maria@example.com", "is_deleted": false },
+    "items": [
+      {
+        "id": "9d1d…",
+        "quantity": 2,
+        "unit_price": "49.90",
+        "line_total": "99.80",
+        "product": { "id": "9d1a…", "name": "Mouse sem fio Pro", "sku": "PB-1234-ab", "is_deleted": false }
+      }
+    ]
+  }
+}
+```
+
 ## Variáveis de ambiente
 
 | Arquivo | Uso |
@@ -119,7 +179,7 @@ Não commite arquivos `.env` com secrets.
 - [x] Fase 1 — Foundation  
 - [x] Fase 2 — Authentication  
 - [x] Fase 3 — Core domain  
-- [ ] Fase 4 — API de negócio (4A Products + Customers concluída; 4B Transactions/Dashboard pendente)  
+- [ ] Fase 4 — API de negócio (4A Products + Customers e 4B Transactions concluídas; Dashboard/Analytics pendente)  
 - [ ] Fase 5 — Frontend de produto  
 - [ ] Fase 6 — Tests  
 - [ ] Fase 7 — CI/CD  

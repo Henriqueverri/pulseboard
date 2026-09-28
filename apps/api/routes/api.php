@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\Api\TransactionController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
@@ -27,5 +28,6 @@ Route::prefix('v1')->group(function (): void {
 
         Route::apiResource('products', ProductController::class);
         Route::apiResource('customers', CustomerController::class);
+        Route::apiResource('transactions', TransactionController::class)->only(['index', 'show']);
     });
 });

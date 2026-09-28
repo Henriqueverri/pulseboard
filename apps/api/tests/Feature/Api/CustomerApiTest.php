@@ -191,6 +191,7 @@ class CustomerApiTest extends TestCase
             [$refunded->id, $paid[5]->id, $paid[4]->id, $paid[3]->id, $paid[2]->id],
             $response->json('data.recent_transactions.*.id'),
         );
+        $this->assertSame(['id', 'status', 'total_amount', 'occurred_at'], array_keys($response->json('data.recent_transactions.0')));
         $this->assertSame('refunded', $response->json('data.recent_transactions.0.status'));
         $this->assertSame('300.00', $response->json('data.recent_transactions.0.total_amount'));
     }

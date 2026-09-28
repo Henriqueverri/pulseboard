@@ -40,7 +40,7 @@ class CustomerResource extends JsonResource
             $this->mergeWhen($this->metrics !== null, fn () => [
                 'orders_count' => $this->metrics['orders_count'],
                 'total_spent' => $this->metrics['total_spent'],
-                'recent_transactions' => TransactionSummaryResource::collection($this->metrics['recent_transactions']),
+                'recent_transactions' => TransactionResource::collection($this->metrics['recent_transactions']),
             ]),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
