@@ -1,0 +1,5 @@
+# Cloudflare Pages response headers (nosniff and Referrer-Policy are added by Pages itself).
+/*
+  X-Frame-Options: DENY
+  Content-Security-Policy: frame-ancestors 'none'
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()

@@ -1,4 +1,11 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+
+// `nuxt generate` bakes the public runtime config into the HTML, so a Cloudflare Pages build
+// without these variables would silently ship a bundle that calls localhost.
+if (process.env.CF_PAGES && (!process.env.NUXT_PUBLIC_API_URL || !process.env.NUXT_PUBLIC_API_ORIGIN)) {
+  throw new Error('NUXT_PUBLIC_API_URL and NUXT_PUBLIC_API_ORIGIN must be set in the Cloudflare Pages build environment.')
+}
+
 export default defineNuxtConfig({
   modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt', '@nuxt/eslint'],
   // SPA: the session lives in an httpOnly cookie of the API origin, so pages are rendered client-side only.
@@ -24,12 +31,19 @@ export default defineNuxtConfig({
   css: ['@fontsource-variable/inter'],
   runtimeConfig: {
     public: {
-      // Overridden by NUXT_PUBLIC_API_URL / NUXT_PUBLIC_API_ORIGIN
+      // Overridden by NUXT_PUBLIC_API_URL / NUXT_PUBLIC_API_ORIGIN when running `nuxt generate`
       apiUrl: 'http://localhost:8000/api/v1',
       apiOrigin: 'http://localhost:8000',
     },
   },
   compatibilityDate: '2025-07-15',
+  nitro: {
+    prerender: {
+      // Cloudflare Pages only falls back to the SPA shell (200 for deep links such as
+      // /products/:id) when the output has no top-level 404.html.
+      ignore: ['/404.html'],
+    },
+  },
   hooks: {
     'pages:extend'(pages) {
       if (process.env.NODE_ENV === 'production') {
