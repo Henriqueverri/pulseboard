@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { PhCheck } from '@phosphor-icons/vue'
 import type { Component } from 'vue'
 import type { RouteLocationRaw } from 'vue-router'
 import {
@@ -20,6 +21,8 @@ export interface MenuItem {
   onSelect?: () => void
   /** Renders a separator before this item. */
   separated?: boolean
+  /** Marks the current choice in single-choice menus. */
+  checked?: boolean
 }
 
 withDefaults(defineProps<{
@@ -94,7 +97,13 @@ const NuxtLink = resolveComponent('NuxtLink')
                 :size="16"
                 aria-hidden="true"
               />
-              {{ item.label }}
+              <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
+              <PhCheck
+                v-if="item.checked"
+                :size="16"
+                class="text-brand-600"
+                aria-label="Selecionada"
+              />
             </template>
           </DropdownMenuItem>
         </template>
