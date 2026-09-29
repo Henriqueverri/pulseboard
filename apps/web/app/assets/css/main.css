@@ -42,7 +42,7 @@
 @layer base {
   html {
     @apply bg-canvas text-ink antialiased;
-    font-feature-settings: 'cv11', 'ss01';
+    font-feature-settings: 'ss01', 'cv01';
     -webkit-tap-highlight-color: transparent;
   }
 
@@ -56,6 +56,15 @@
 
   ::selection {
     @apply bg-brand-200 text-ink;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
   }
 }
 

@@ -3,6 +3,11 @@ export default defineNuxtConfig({
   modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt', '@nuxt/eslint'],
   // SPA: the session lives in an httpOnly cookie of the API origin, so pages are rendered client-side only.
   ssr: false,
+  components: [
+    // UI primitives are prefixed (<UiButton>); feature components use their file name (<KpiCard>).
+    { path: '~/components/ui', prefix: 'Ui' },
+    { path: '~/components', pathPrefix: false },
+  ],
   devtools: { enabled: true },
   app: {
     head: {
@@ -25,6 +30,16 @@ export default defineNuxtConfig({
     },
   },
   compatibilityDate: '2025-07-15',
+  hooks: {
+    'pages:extend'(pages) {
+      if (process.env.NODE_ENV === 'production') {
+        const index = pages.findIndex(page => page.path === '/dev/ui')
+        if (index !== -1) {
+          pages.splice(index, 1)
+        }
+      }
+    },
+  },
   eslint: {
     config: {
       stylistic: true,

@@ -67,6 +67,23 @@ export default {
         sidebar: '240px',
         rail: '64px',
       },
+      // Individual `scale` / `translate` properties compose with Tailwind's `transform` centering.
+      keyframes: {
+        'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },
+        'dialog-in': { from: { opacity: '0', scale: '0.97' }, to: { opacity: '1', scale: '1' } },
+        'sheet-in': { from: { translate: '0 100%' }, to: { translate: '0 0' } },
+        'drawer-left': { from: { translate: '-100% 0' }, to: { translate: '0 0' } },
+        'drawer-right': { from: { translate: '100% 0' }, to: { translate: '0 0' } },
+        'toast-in': { from: { opacity: '0', translate: '0 8px' }, to: { opacity: '1', translate: '0 0' } },
+      },
+      animation: {
+        'fade-in': 'fade-in 150ms ease-out',
+        'dialog-in': 'dialog-in 180ms cubic-bezier(0.16, 1, 0.3, 1)',
+        'sheet-in': 'sheet-in 240ms cubic-bezier(0.16, 1, 0.3, 1)',
+        'drawer-left': 'drawer-left 220ms cubic-bezier(0.16, 1, 0.3, 1)',
+        'drawer-right': 'drawer-right 220ms cubic-bezier(0.16, 1, 0.3, 1)',
+        'toast-in': 'toast-in 200ms ease-out',
+      },
     },
   },
 } satisfies Config
