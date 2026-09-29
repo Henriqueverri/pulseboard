@@ -2,7 +2,7 @@
 import { PhDotsThree, PhPencilSimple, PhPlus, PhTrash } from '@phosphor-icons/vue'
 
 // Development-only catalog of the UI primitives (removed from production builds in nuxt.config).
-definePageMeta({ layout: false })
+definePageMeta({ layout: false, auth: false })
 
 const toast = useToast()
 const text = ref('')

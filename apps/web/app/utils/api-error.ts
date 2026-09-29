@@ -62,13 +62,17 @@ const KNOWN_MESSAGES: Array<[RegExp, string]> = [
   [/password field must be at least/i, 'A senha deve ter pelo menos 8 caracteres.'],
   [/period may not be longer than/i, 'O período pode ter no máximo 366 dias.'],
   [/to date must be on or after/i, 'A data final deve ser igual ou posterior à inicial.'],
+  [/^The .+ field is required\.?$/i, 'Campo obrigatório.'],
+  [/must be a valid email address/i, 'Informe um e-mail válido.'],
+  [/^The .+ field must not be greater than (\d+) characters\.?$/i, 'Use no máximo $1 caracteres.'],
 ]
 
 /** Translates the API messages the UI knows about; other messages are shown as received. */
 export function translateApiMessage(message: string): string {
   for (const [pattern, translation] of KNOWN_MESSAGES) {
-    if (pattern.test(message)) {
-      return translation
+    const match = message.match(pattern)
+    if (match) {
+      return translation.replace(/\$(\d)/g, (_, group: string) => match[Number(group)] ?? '')
     }
   }
 

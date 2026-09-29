@@ -1,39 +1,30 @@
 <script setup lang="ts">
-import { ApiError } from '~/utils/api-error'
+import { HOME_PATH, safeRedirect } from '~/utils/auth-redirect'
 
 definePageMeta({
   layout: 'auth',
-  middleware: 'guest',
+  auth: 'guest',
 })
 
-const auth = useAuth()
+useHead({ title: 'Entrar · PulseBoard' })
 
-const email = ref('')
-const password = ref('')
+const auth = useAuth()
+const route = useRoute()
+
+const form = reactive({ email: '', password: '' })
 const pending = ref(false)
-const formError = ref<string | null>(null)
-const fieldErrors = ref<Record<string, string[]>>({})
+const { fieldErrors, formError, capture, clear, reset } = useFormErrors(['email', 'password'] as const)
 
 async function onSubmit() {
-  formError.value = null
-  fieldErrors.value = {}
+  reset()
   pending.value = true
 
   try {
-    await auth.login({
-      email: email.value,
-      password: password.value,
-    })
-    await navigateTo('/')
+    await auth.login({ email: form.email.trim(), password: form.password })
+    await navigateTo(safeRedirect(route.query.redirect) ?? HOME_PATH)
   }
   catch (error) {
-    if (error instanceof ApiError) {
-      formError.value = error.message
-      fieldErrors.value = error.body?.errors ?? {}
-    }
-    else {
-      formError.value = 'Unable to sign in. Try again.'
-    }
+    capture(error, 'Não foi possível entrar. Tente novamente.')
   }
   finally {
     pending.value = false
@@ -43,82 +34,81 @@ async function onSubmit() {
 
 <template>
   <div>
-    <h1 class="text-3xl font-semibold tracking-tight">
-      Sign in
+    <h1 class="text-2xl font-semibold tracking-tight">
+      Entrar
     </h1>
-    <p class="mt-2 text-slate-600">
-      Access your organization with a secure session cookie.
+    <p class="mt-1.5 text-sm text-ink/55">
+      Acesse o painel da sua organização.
     </p>
 
     <form
-      class="mt-8 space-y-4"
+      class="mt-8 space-y-5"
+      novalidate
       @submit.prevent="onSubmit"
     >
-      <div>
-        <label
-          for="email"
-          class="block text-sm font-medium text-slate-700"
-        >Email</label>
-        <input
-          id="email"
-          v-model="email"
-          type="email"
-          required
-          autocomplete="email"
-          class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500"
-        >
-        <p
-          v-if="fieldErrors.email"
-          class="mt-1 text-sm text-red-600"
-        >
-          {{ fieldErrors.email[0] }}
-        </p>
-      </div>
-
-      <div>
-        <label
-          for="password"
-          class="block text-sm font-medium text-slate-700"
-        >Password</label>
-        <input
-          id="password"
-          v-model="password"
-          type="password"
-          required
-          autocomplete="current-password"
-          class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500"
-        >
-        <p
-          v-if="fieldErrors.password"
-          class="mt-1 text-sm text-red-600"
-        >
-          {{ fieldErrors.password[0] }}
-        </p>
-      </div>
-
-      <p
+      <UiAlert
         v-if="formError"
-        class="text-sm text-red-600"
+        tone="danger"
       >
         {{ formError }}
-      </p>
+      </UiAlert>
 
-      <button
-        type="submit"
-        class="w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-        :disabled="pending"
+      <UiFormField
+        v-slot="{ id, describedBy, invalid }"
+        label="E-mail"
+        :error="fieldErrors.email"
       >
-        {{ pending ? 'Signing in…' : 'Sign in' }}
-      </button>
+        <UiInput
+          :id="id"
+          v-model="form.email"
+          type="email"
+          name="email"
+          autocomplete="email"
+          inputmode="email"
+          size="lg"
+          required
+          autofocus
+          :invalid="invalid"
+          :described-by="describedBy"
+          @update:model-value="clear('email')"
+        />
+      </UiFormField>
+
+      <UiFormField
+        v-slot="{ id, describedBy, invalid }"
+        label="Senha"
+        :error="fieldErrors.password"
+      >
+        <PasswordInput
+          :id="id"
+          v-model="form.password"
+          name="password"
+          autocomplete="current-password"
+          required
+          :invalid="invalid"
+          :described-by="describedBy"
+          @update:model-value="clear('password')"
+        />
+      </UiFormField>
+
+      <UiButton
+        type="submit"
+        variant="primary"
+        size="lg"
+        block
+        :loading="pending"
+      >
+        Entrar
+      </UiButton>
     </form>
 
-    <p class="mt-6 text-sm text-slate-600">
-      No account?
+    <p class="mt-8 text-center text-sm text-ink/55">
+      Ainda não tem conta?
       <NuxtLink
         to="/register"
-        class="font-medium text-slate-900 underline"
+        class="font-medium text-ink underline-offset-4 hover:underline"
       >
-        Create one
+        Criar conta
       </NuxtLink>
     </p>
   </div>
