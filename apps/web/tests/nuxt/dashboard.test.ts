@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mountSuspended } from '@nuxt/test-utils/runtime'
+import { mockComponent, mountSuspended } from '@nuxt/test-utils/runtime'
+import { h } from 'vue'
 import { flushPromises } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import { useAuthStore } from '~/stores/auth'
@@ -96,7 +97,12 @@ const customers: CustomerAnalyticsResponse = {
   meta: { ...meta, sort: 'revenue', limit: 5 },
 }
 
-const stubs = { LazyRevenueChart: true, LazyStatusDonutChart: { template: '<div><slot /></div>' } }
+mockComponent('~/components/charts/RevenueChart.client.vue', {
+  setup: () => () => h('div', { 'data-chart': '' }),
+})
+mockComponent('~/components/charts/StatusDonutChart.client.vue', {
+  setup: (_props, { slots }) => () => h('div', slots.default?.()),
+})
 
 function section(wrapper: VueWrapper, title: string) {
   const card = wrapper.findAll('section').find(node => node.find('h2').exists() && node.find('h2').text() === title)
@@ -126,7 +132,7 @@ afterEach(() => {
 
 describe('dashboard page', () => {
   it('requests the five sections with the same period', async () => {
-    const wrapper = await mountSuspended(DashboardPage, { route: '/dashboard?period=7d', global: { stubs } })
+    const wrapper = await mountSuspended(DashboardPage, { route: '/dashboard?period=7d' })
     await flushPromises()
 
     const period = { from: '2026-09-23', to: '2026-09-29' }
@@ -139,7 +145,7 @@ describe('dashboard page', () => {
   })
 
   it('shows the API numbers with their comparison and the period caption', async () => {
-    const wrapper = await mountSuspended(DashboardPage, { route: '/dashboard', global: { stubs } })
+    const wrapper = await mountSuspended(DashboardPage, { route: '/dashboard' })
     await flushPromises()
 
     const text = wrapper.text().replace(/\s+/g, ' ')
@@ -169,7 +175,7 @@ describe('dashboard page', () => {
       },
     })
 
-    const wrapper = await mountSuspended(DashboardPage, { route: '/dashboard', global: { stubs } })
+    const wrapper = await mountSuspended(DashboardPage, { route: '/dashboard' })
     await flushPromises()
 
     const text = wrapper.text().replace(/\s+/g, ' ')
@@ -180,7 +186,7 @@ describe('dashboard page', () => {
   })
 
   it('links ranked entities except removed ones, and keeps the period in "Ver análise"', async () => {
-    const wrapper = await mountSuspended(DashboardPage, { route: '/dashboard?period=90d', global: { stubs } })
+    const wrapper = await mountSuspended(DashboardPage, { route: '/dashboard?period=90d' })
     await flushPromises()
 
     const card = section(wrapper, 'Top 5 produtos')
@@ -198,7 +204,7 @@ describe('dashboard page', () => {
   it('isolates a failing section and retries only that request', async () => {
     repository.products.mockRejectedValueOnce(new ApiError(500, { message: 'Server Error' }))
 
-    const wrapper = await mountSuspended(DashboardPage, { route: '/dashboard', global: { stubs } })
+    const wrapper = await mountSuspended(DashboardPage, { route: '/dashboard' })
     await flushPromises()
 
     const card = section(wrapper, 'Top 5 produtos')
@@ -226,7 +232,7 @@ describe('dashboard page', () => {
     repository.products.mockResolvedValue({ ...products, data: [] })
     repository.customers.mockResolvedValue({ ...customers, data: [] })
 
-    const wrapper = await mountSuspended(DashboardPage, { route: '/dashboard', global: { stubs } })
+    const wrapper = await mountSuspended(DashboardPage, { route: '/dashboard' })
     await flushPromises()
 
     expect(wrapper.text()).toContain('Nenhuma venda no período')
@@ -237,7 +243,7 @@ describe('dashboard page', () => {
   })
 
   it('refetches only the revenue series when the granularity changes', async () => {
-    const wrapper = await mountSuspended(DashboardPage, { route: '/dashboard', global: { stubs } })
+    const wrapper = await mountSuspended(DashboardPage, { route: '/dashboard' })
     await flushPromises()
 
     await wrapper.findAll('button').find(button => button.text() === 'Semana')!.trigger('click')

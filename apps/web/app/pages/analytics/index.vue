@@ -1,5 +1,5 @@
 <script setup lang="ts">
-definePageMeta({ redirect: '/analytics/revenue' })
+definePageMeta({ redirect: to => ({ path: '/analytics/revenue', query: to.query }) })
 </script>
 
 <template>

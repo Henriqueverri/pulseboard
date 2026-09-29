@@ -15,17 +15,23 @@ import type { Granularity } from '~/utils/period'
 
 Chart.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip)
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   buckets: RevenueBucket[]
   granularity: Granularity
   currency: string
-}>()
+  metric?: 'revenue' | 'orders'
+  /** Screen-reader table of the buckets; turn off when the page shows an equivalent table. */
+  srTable?: boolean
+}>(), {
+  metric: 'revenue',
+  srTable: true,
+})
 
 const data = computed<ChartData<'line'>>(() => ({
   labels: props.buckets.map(bucket => bucketAxisLabel(bucket, props.granularity)),
   datasets: [{
-    label: 'Receita',
-    data: props.buckets.map(bucket => Number(bucket.revenue)),
+    label: props.metric === 'revenue' ? 'Receita' : 'Pedidos',
+    data: props.buckets.map(bucket => props.metric === 'revenue' ? Number(bucket.revenue) : bucket.orders),
     borderColor: tokenColor('brand-500'),
     borderWidth: 2,
     cubicInterpolationMode: 'monotone',
@@ -69,7 +75,10 @@ const options = computed<ChartOptions<'line'>>(() => ({
         color: tokenColor('ink', 0.45),
         maxTicksLimit: 5,
         font: { size: 11, family: CHART_FONT },
-        callback: value => formatMoney(Number(value), props.currency, { compact: true }),
+        precision: 0,
+        callback: value => props.metric === 'revenue'
+          ? formatMoney(Number(value), props.currency, { compact: true })
+          : formatCompactNumber(Number(value)),
       },
     },
   },
@@ -99,8 +108,8 @@ const summary = computed(() => {
   const last = props.buckets[props.buckets.length - 1]
 
   return first && last
-    ? `Gráfico de receita de ${formatCivilRange(first.from, last.to)}, ${props.buckets.length} pontos. Valores detalhados na tabela a seguir.`
-    : 'Gráfico de receita sem dados.'
+    ? `Gráfico de ${props.metric === 'revenue' ? 'receita' : 'pedidos'} de ${formatCivilRange(first.from, last.to)}, ${props.buckets.length} pontos. Valores detalhados na tabela.`
+    : 'Gráfico sem dados.'
 })
 </script>
 
@@ -117,7 +126,10 @@ const summary = computed(() => {
         aria-hidden="true"
       />
     </div>
-    <table class="sr-only">
+    <table
+      v-if="srTable"
+      class="sr-only"
+    >
       <caption>Receita por período</caption>
       <thead>
         <tr>
