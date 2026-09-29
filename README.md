@@ -586,10 +586,11 @@ As URLs padrão (`*.pages.dev` e `*.up.railway.app`) são sites diferentes — o
 
 ### API no Railway
 
-Serviço a partir deste repositório, com **Root Directory** `apps/api`. O builder padrão (Railpack) detecta o Laravel, instala PHP 8.4 e `pdo_pgsql` a partir do `composer.json`, e a cada start roda `php artisan migrate --force`, `storage:link` e `optimize` (cache de config, rotas, eventos e views) antes de subir o FrankenPHP.
+Serviço a partir deste repositório, com **Root Directory** `apps/api`. O builder padrão (Railpack) detecta o Laravel, instala PHP 8.4 e `pdo_pgsql` a partir do `composer.json`, e a cada start roda `storage:link` e `optimize` (cache de config, rotas, eventos e views) antes de subir o FrankenPHP. Por padrão ele também roda `migrate --force` a cada start; com `RAILPACK_SKIP_MIGRATIONS=true` as migrations passam para o pre-deploy (uma vez por deploy, antes de o tráfego mudar).
 
 Configurações do serviço:
 
+- Pre-deploy command: `php artisan migrate --force && php artisan pulseboard:demo` (migrations + conta de demonstração; ver abaixo).
 - Healthcheck path: `/api/v1/health` (200 com `{"status":"ok","database":"ok"}`, 503 se o banco não responde; não expõe versões nem erros).
 - Watch paths: `/apps/api/**` (evita redeploy da API em mudanças só do front).
 - Domínio: `api.seudominio.com` (custom domain do Railway, HTTPS automático).
@@ -614,10 +615,24 @@ Variáveis:
 | `DB_URL` | `${{Postgres.DATABASE_URL}}` (referência ao serviço PostgreSQL do Railway) |
 | `LOG_CHANNEL` | `stderr` (logs aparecem no painel do Railway) |
 | `LOG_LEVEL` | `info` |
+| `RAILPACK_SKIP_MIGRATIONS` | `true` (migrations no pre-deploy) |
+| `DEMO_PASSWORD` | senha das contas de demonstração (mínimo 12 caracteres; é a senha que você divulga no portfólio) |
+| `DEMO_OWNER_EMAIL` / `DEMO_MEMBER_EMAIL` | opcionais; padrão `demo@example.com` e `demo-member@example.com` |
 
 Não há filas, jobs, e-mails nem storage de arquivos em uso: não é preciso worker, Redis ou volume.
 
-**Dados de demonstração:** o seed (`DatabaseSeeder`) espera banco vazio, não é idempotente, usa factories/Faker (dependências de desenvolvimento) e cria usuários com a senha `password`. Ele não roda no deploy; carregar dados de demo em produção é uma decisão à parte.
+### Dados de demonstração
+
+`php artisan pulseboard:demo` cria a organização "PulseBoard Demo Store" (slug `pulseboard-demo`) com uma conta owner e uma member, 40 produtos, 70 clientes e ~90 dias de vendas terminando hoje. Não usa Faker nem factories, e só mexe nessa organização:
+
+- sem `DEMO_PASSWORD` (ou com menos de 12 caracteres) o comando falha sem gravar nada;
+- se a demo já existe, não altera os dados, só sincroniza a senha das duas contas com `DEMO_PASSWORD` — por isso pode rodar em todo deploy;
+- `--refresh` apaga produtos, clientes e transações **somente da organização de demo** (inclusive o que visitantes criaram) e gera o histórico de novo, terminando no dia atual;
+- recusa rodar se um dos e-mails de demo pertence a uma conta de outra organização, ou se o slug pertence a uma organização que não é da conta demo owner.
+
+O histórico é relativo à data do seed: com o período padrão de 30 dias, o dashboard esvazia cerca de um mês depois. Rode `php artisan pulseboard:demo --refresh` periodicamente (manualmente no serviço, ou num serviço de cron do Railway com esse comando como start command).
+
+O `DatabaseSeeder` (`migrate:fresh --seed`) continua sendo só para desenvolvimento: usa factories e cria `test@example.com` / `password`.
 
 ### Front no Cloudflare Pages
 
@@ -637,15 +652,16 @@ No Pages (`CF_PAGES`), o Nitro usa o preset `cloudflare-pages-static`: gera `dis
 
 1. Domínio próprio com dois subdomínios (front e API).
 2. Railway: PostgreSQL + serviço da API com as variáveis acima e o custom domain.
-3. Conferir `https://api.seudominio.com/api/v1/health`.
+3. Conferir `https://api.seudominio.com/api/v1/health` e, nos logs do pre-deploy, a linha "Demo organization seeded".
 4. Cloudflare Pages com as variáveis de build e o custom domain.
-5. Login no front, criar/editar/remover um produto e navegar pelo analytics.
+5. Login no front com `DEMO_OWNER_EMAIL` / `DEMO_PASSWORD`, criar/editar/remover um produto e navegar pelo analytics.
 
 ## Limitações conhecidas
 
 - Sem domínio próprio compartilhado entre front e API, a autenticação não funciona em produção (ver acima). Previews do Pages (`<hash>.<projeto>.pages.dev`) também não autenticam: não estão no CORS nem no `SANCTUM_STATEFUL_DOMAINS`.
 - Um único ambiente de produção; sem staging.
-- Migrations rodam no start do container: seguro com uma réplica; com várias réplicas, mover para um pre-deploy command.
+- A conta demo owner pode alterar os dados da demo (é o objetivo); `--refresh` restaura o estado original.
+- Railpack instala as dependências de desenvolvimento do Composer (não usa `--no-dev`); o runtime não depende delas.
 - Sem monitoramento de erros externo: os logs são o `stderr` do Railway.
 - Suíte PHPUnit local em SQLite por padrão; a paridade com PostgreSQL é garantida na CI.
 
