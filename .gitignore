@@ -47,7 +47,7 @@ apps/api/bootstrap/cache/*.php
 apps/api/public/hot
 apps/api/public/storage
 apps/api/database/*.sqlite
-apps/api.phpunit.result.cache
+apps/api/.phpunit.result.cache
 apps/api/.phpunit.cache/
 
 # Docker
