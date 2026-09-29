@@ -64,11 +64,17 @@ export function useFormErrors<Field extends string>(fields: readonly Field[]) {
     }
   }
 
+  /** Client-side check that the API cannot express (e.g. an amount the user typed but we cannot parse). */
+  function setFieldError(field: Field, message: string) {
+    fieldErrors.value = { ...fieldErrors.value, [field]: message }
+  }
+
   return {
     fieldErrors,
     formError,
     capture,
     clear,
     reset,
+    setFieldError,
   }
 }

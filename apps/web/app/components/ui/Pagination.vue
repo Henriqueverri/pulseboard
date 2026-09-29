@@ -2,12 +2,30 @@
 import { PhCaretLeft, PhCaretRight } from '@phosphor-icons/vue'
 import type { PaginationMeta } from '~/types/api'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   meta: Pick<PaginationMeta, 'current_page' | 'last_page' | 'total' | 'from' | 'to'>
   disabled?: boolean
-}>()
+  /** Shows the page size selector when set. */
+  perPage?: number
+  perPageOptions?: readonly number[]
+}>(), {
+  disabled: false,
+  perPage: undefined,
+  perPageOptions: () => [15, 25, 50],
+})
 
-const emit = defineEmits<{ 'update:page': [page: number] }>()
+const emit = defineEmits<{ 'update:page': [page: number], 'update:perPage': [perPage: number] }>()
+
+const perPageModel = computed({
+  get: () => String(props.perPage),
+  set: (value: string) => emit('update:perPage', Number(value)),
+})
+
+const perPageSelectOptions = computed(() => {
+  const values = new Set([...props.perPageOptions, ...(props.perPage ? [props.perPage] : [])])
+
+  return [...values].sort((a, b) => a - b).map(value => ({ value: String(value), label: String(value) }))
+})
 
 type PageItem = number | 'gap'
 
@@ -50,15 +68,31 @@ function go(page: number) {
     class="flex flex-wrap items-center justify-between gap-3"
     aria-label="Paginação"
   >
-    <p class="text-xs text-ink/55 tabular">
-      <template v-if="meta.total > 0">
-        Mostrando <span class="font-medium text-ink">{{ formatInteger(meta.from) }}–{{ formatInteger(meta.to) }}</span>
-        de <span class="font-medium text-ink">{{ formatInteger(meta.total) }}</span>
-      </template>
-      <template v-else>
-        Nenhum resultado
-      </template>
-    </p>
+    <div class="flex items-center gap-4">
+      <p class="text-xs text-ink/55 tabular">
+        <template v-if="meta.total > 0">
+          Mostrando <span class="font-medium text-ink">{{ formatInteger(meta.from) }}–{{ formatInteger(meta.to) }}</span>
+          de <span class="font-medium text-ink">{{ formatInteger(meta.total) }}</span>
+        </template>
+        <template v-else>
+          Nenhum resultado
+        </template>
+      </p>
+      <div
+        v-if="perPage"
+        class="hidden items-center gap-2 whitespace-nowrap text-xs text-ink/55 sm:flex"
+      >
+        <span aria-hidden="true">Por página</span>
+        <UiSelect
+          v-model="perPageModel"
+          :options="perPageSelectOptions"
+          label="Itens por página"
+          size="sm"
+          :disabled="disabled"
+          class="w-[72px]"
+        />
+      </div>
+    </div>
     <div
       v-if="meta.last_page > 1"
       class="flex items-center gap-1"

@@ -79,9 +79,22 @@ export function translateApiMessage(message: string): string {
   return message
 }
 
-/** User-facing message for any error thrown by a request. */
-export function errorMessage(error: unknown, fallback = 'Algo deu errado. Tente novamente.'): string {
+/** The `ApiError` behind an error, including the `NuxtError` wrapper `useAsyncData` exposes. */
+export function asApiError(error: unknown): ApiError | null {
   if (error instanceof ApiError) {
+    return error
+  }
+
+  const cause = (error as { cause?: unknown } | null)?.cause
+
+  return cause instanceof ApiError ? cause : null
+}
+
+/** User-facing message for any error thrown by a request. */
+export function errorMessage(rawError: unknown, fallback = 'Algo deu errado. Tente novamente.'): string {
+  const error = asApiError(rawError)
+
+  if (error) {
     if (error.isNetwork) {
       return 'Não foi possível conectar à API. Verifique sua conexão.'
     }
