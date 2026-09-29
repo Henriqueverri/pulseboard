@@ -1,0 +1,173 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PHP_VERSION: '8.4'
+  BUN_VERSION: '1.3.10'
+
+jobs:
+  api:
+    name: API (PHPUnit on PostgreSQL, Pint)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: apps/api
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: pulseboard_test
+          POSTGRES_USER: pulseboard
+          POSTGRES_PASSWORD: pulseboard
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U pulseboard -d pulseboard_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # Override phpunit.xml's SQLite so the PostgreSQL-only paths (timezone buckets) run too.
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: pulseboard_test
+      DB_USERNAME: pulseboard
+      DB_PASSWORD: pulseboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: pdo_pgsql
+          coverage: none
+
+      - name: Composer cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ hashFiles('apps/api/composer.lock') }}
+          restore-keys: composer-
+
+      - run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - run: vendor/bin/pint --test
+
+      - name: Migrations on a clean database
+        run: php artisan migrate --force
+
+      - run: php artisan test
+
+  web:
+    name: Web (Vitest, typecheck, lint, build)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun run test
+      - run: bun run generate
+
+  e2e:
+    name: E2E smoke (PostgreSQL → API → static build → Playwright)
+    needs: [api, web]
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: pulseboard_e2e
+          POSTGRES_USER: pulseboard
+          POSTGRES_PASSWORD: pulseboard
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U pulseboard -d pulseboard_e2e"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: pulseboard_e2e
+      DB_USERNAME: pulseboard
+      DB_PASSWORD: pulseboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: pdo_pgsql
+          coverage: none
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Composer cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ hashFiles('apps/api/composer.lock') }}
+          restore-keys: composer-
+
+      - name: Start the API with the demo seed
+        working-directory: apps/api
+        run: |
+          composer install --no-interaction --no-progress --prefer-dist
+          cp .env.example .env
+          php artisan key:generate
+          php artisan migrate:fresh --seed --force
+          php artisan serve --host=127.0.0.1 --port=8000 > storage/logs/serve.log 2>&1 &
+
+      - name: Build and serve the web app on localhost:3000
+        working-directory: apps/web
+        run: |
+          bun install --frozen-lockfile
+          bun run generate
+          bun run serve:static > serve-static.log 2>&1 &
+
+      - name: Wait for both servers
+        run: |
+          for url in http://127.0.0.1:8000/api/v1/health http://localhost:3000/login; do
+            timeout 60 bash -c "until curl -fsS -o /dev/null $url; do sleep 1; done"
+          done
+
+      - name: Playwright smoke
+        working-directory: apps/web
+        run: bun run test:e2e
+
+      - name: Server logs
+        if: failure()
+        run: |
+          cat apps/api/storage/logs/*.log || true
+          cat apps/web/serve-static.log || true
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-results
+          path: apps/web/test-results
+          retention-days: 7
