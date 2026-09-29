@@ -18,7 +18,7 @@ defineProps<{
       class="flex items-start gap-3"
     >
       <span
-        class="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-ink/[0.05] text-xs font-semibold text-ink/60 tabular"
+        class="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-ink/[0.05] text-xs font-semibold text-ink/65 tabular"
         aria-hidden="true"
       >{{ item.rank }}</span>
       <div class="min-w-0 flex-1">
@@ -54,7 +54,7 @@ defineProps<{
         </div>
         <p
           v-if="item.sublabel"
-          class="truncate text-xs text-ink/50"
+          class="truncate text-xs text-ink/65"
         >
           {{ item.sublabel }}
         </p>

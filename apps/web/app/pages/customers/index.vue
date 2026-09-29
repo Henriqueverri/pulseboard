@@ -131,7 +131,7 @@ async function onSaved(customer: Customer, mode: 'created' | 'updated') {
               >
                 {{ row.name }}
               </NuxtLink>
-              <p class="truncate text-xs text-ink/50 md:hidden">
+              <p class="truncate text-xs text-ink/65 md:hidden">
                 {{ row.email }}
               </p>
             </div>

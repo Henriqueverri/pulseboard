@@ -35,7 +35,7 @@ const showsRail = computed(() => props.mode === 'responsive' && (props.collapsed
       v-for="group in NAVIGATION"
       :key="group.label"
     >
-      <p class="mb-1.5 px-3 text-xs font-medium text-ink/40">
+      <p class="mb-1.5 px-3 text-xs font-medium text-ink/65">
         <span :class="labelClass">{{ group.label }}</span>
       </p>
       <ul class="flex flex-col gap-0.5">

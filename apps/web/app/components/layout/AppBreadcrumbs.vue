@@ -19,7 +19,7 @@ const { crumbs } = useBreadcrumbs()
         <NuxtLink
           v-if="crumb.to"
           :to="crumb.to"
-          class="truncate text-ink/50 hover:text-ink"
+          class="truncate text-ink/65 hover:text-ink"
         >
           {{ crumb.label }}
         </NuxtLink>

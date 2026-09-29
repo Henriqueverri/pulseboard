@@ -36,7 +36,7 @@ function onUpdate(value: unknown) {
       v-for="option in options"
       :key="option.value"
       :value="option.value"
-      class="inline-flex items-center justify-center whitespace-nowrap rounded-md px-2.5 font-medium text-ink/55 transition-colors hover:text-ink data-[state=on]:bg-surface data-[state=on]:text-ink data-[state=on]:shadow-soft"
+      class="inline-flex items-center justify-center whitespace-nowrap rounded-md px-2.5 font-medium text-ink/65 transition-colors hover:text-ink data-[state=on]:bg-surface data-[state=on]:text-ink data-[state=on]:shadow-soft"
       :class="size === 'sm' ? 'h-7 text-xs' : 'h-8 text-sm'"
     >
       {{ option.label }}

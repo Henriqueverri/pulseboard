@@ -72,7 +72,7 @@ const customerName = computed(() => {
               size="sm"
               class="sm:hidden"
             />
-            <span class="truncate text-xs text-ink/60">{{ row.customer.name }}</span>
+            <span class="truncate text-xs text-ink/65">{{ row.customer.name }}</span>
             <UiTag
               v-if="row.customer.is_deleted"
               size="sm"
@@ -103,7 +103,7 @@ const customerName = computed(() => {
         <template #cell-open="{ row }">
           <NuxtLink
             :to="`/transactions/${row.id}`"
-            class="flex size-8 items-center justify-center rounded-md text-ink/40 hover:bg-ink/[0.05] hover:text-ink"
+            class="flex size-8 items-center justify-center rounded-md text-ink/65 hover:bg-ink/[0.05] hover:text-ink"
             :aria-label="`Abrir transação de ${formatDateTime(row.occurred_at, timezone, { time: true })}`"
           >
             <PhCaretRight :size="16" />

@@ -37,7 +37,7 @@ const emit = defineEmits<{ retry: [] }>()
       </p>
       <p
         v-if="message"
-        class="mt-1 text-xs text-ink/55"
+        class="mt-1 text-xs text-ink/65"
       >
         {{ message }}
       </p>

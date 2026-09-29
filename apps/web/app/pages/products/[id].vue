@@ -129,7 +129,7 @@ async function onDeleted() {
           :value="formatInteger(product.units_sold)"
         />
       </div>
-      <p class="mt-2 text-xs text-ink/50">
+      <p class="mt-2 text-xs text-ink/65">
         Totais de todo o histórico, considerando somente transações pagas.
       </p>
 
@@ -139,7 +139,7 @@ async function onDeleted() {
       >
         <dl class="grid gap-x-8 gap-y-4 text-sm sm:grid-cols-2">
           <div>
-            <dt class="text-ink/55">
+            <dt class="text-ink/65">
               Preço atual
             </dt>
             <dd class="mt-0.5 font-medium tabular">
@@ -147,7 +147,7 @@ async function onDeleted() {
             </dd>
           </div>
           <div>
-            <dt class="text-ink/55">
+            <dt class="text-ink/65">
               SKU
             </dt>
             <dd class="mt-0.5 font-medium">
@@ -155,7 +155,7 @@ async function onDeleted() {
             </dd>
           </div>
           <div>
-            <dt class="text-ink/55">
+            <dt class="text-ink/65">
               Criado em
             </dt>
             <dd class="mt-0.5 font-medium tabular">
@@ -163,7 +163,7 @@ async function onDeleted() {
             </dd>
           </div>
           <div>
-            <dt class="text-ink/55">
+            <dt class="text-ink/65">
               Atualizado em
             </dt>
             <dd class="mt-0.5 font-medium tabular">

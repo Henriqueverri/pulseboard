@@ -25,13 +25,13 @@ defineExpose({ focus: () => input.value?.focus() })
         ? 'border-danger-strong/60 focus-within:ring-danger/20'
         : 'border-ink/10 hover:border-ink/20 focus-within:border-brand-500 focus-within:ring-brand-500/15',
       size === 'sm' ? 'h-8' : size === 'lg' ? 'h-11' : 'h-9',
-      $attrs.disabled !== undefined && $attrs.disabled !== false ? 'bg-ink/[0.03] text-ink/40' : '',
+      $attrs.disabled !== undefined && $attrs.disabled !== false ? 'bg-ink/[0.03] text-ink/65' : '',
       $attrs.class,
     ]"
   >
     <span
       v-if="$slots.leading"
-      class="flex shrink-0 items-center text-ink/45"
+      class="flex shrink-0 items-center text-ink/65"
     >
       <slot name="leading" />
     </span>
@@ -45,7 +45,7 @@ defineExpose({ focus: () => input.value?.focus() })
     >
     <span
       v-if="$slots.trailing"
-      class="flex shrink-0 items-center text-ink/45"
+      class="flex shrink-0 items-center text-ink/65"
     >
       <slot name="trailing" />
     </span>

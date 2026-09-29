@@ -157,7 +157,7 @@ async function onSubmit() {
           <p class="text-sm font-medium text-ink">
             Produto ativo
           </p>
-          <p class="text-xs text-ink/55">
+          <p class="text-xs text-ink/65">
             Produtos inativos continuam no histórico de vendas.
           </p>
           <p

@@ -30,7 +30,7 @@ defineProps<{
     </div>
     <p
       v-if="showEmail"
-      class="truncate text-xs text-ink/50"
+      class="truncate text-xs text-ink/65"
     >
       {{ customer.email }}
     </p>

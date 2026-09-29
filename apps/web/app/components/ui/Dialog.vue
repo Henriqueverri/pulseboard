@@ -49,14 +49,14 @@ function guard(event: Event, persistent: boolean) {
             </DialogTitle>
             <DialogDescription
               v-if="description"
-              class="mt-1 text-sm text-ink/60"
+              class="mt-1 text-sm text-ink/65"
             >
               {{ description }}
             </DialogDescription>
           </div>
           <DialogClose
             v-if="!persistent"
-            class="-mr-1.5 -mt-1 rounded-md p-1.5 text-ink/50 hover:bg-ink/5 hover:text-ink"
+            class="-mr-1.5 -mt-1 rounded-md p-1.5 text-ink/65 hover:bg-ink/5 hover:text-ink"
             aria-label="Fechar"
           >
             <PhX :size="18" />

@@ -91,7 +91,7 @@ async function onSaved(saved: Customer) {
             <h1 class="truncate text-xl font-semibold tracking-tight text-ink sm:text-2xl">
               {{ customer.name }}
             </h1>
-            <p class="truncate text-sm text-ink/55">
+            <p class="truncate text-sm text-ink/65">
               {{ customer.email }} · cliente desde {{ formatDateTime(customer.created_at, timezone, { time: false }) }}
             </p>
           </div>
@@ -130,7 +130,7 @@ async function onSaved(saved: Customer) {
           :value="formatMoney(customer.total_spent, currency)"
         />
       </div>
-      <p class="mt-2 text-xs text-ink/50">
+      <p class="mt-2 text-xs text-ink/65">
         Totais de todo o histórico, considerando somente transações pagas.
       </p>
 

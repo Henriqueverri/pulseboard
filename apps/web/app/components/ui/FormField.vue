@@ -36,7 +36,7 @@ const describedBy = computed(() => [
       >*</span>
       <span
         v-else-if="optional"
-        class="text-xs font-normal text-ink/50"
+        class="text-xs font-normal text-ink/65"
       >(opcional)</span>
     </label>
     <slot
@@ -55,7 +55,7 @@ const describedBy = computed(() => [
     <p
       v-else-if="hint"
       :id="hintId"
-      class="text-xs text-ink/55"
+      class="text-xs text-ink/65"
     >
       {{ hint }}
     </p>

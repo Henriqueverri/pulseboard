@@ -33,13 +33,13 @@ const items = computed<MenuItem[]>(() => organizations.value.map(item => ({
     >
       <PhBuildings
         :size="16"
-        class="shrink-0 text-ink/50"
+        class="shrink-0 text-ink/65"
         aria-hidden="true"
       />
       <span class="min-w-0 flex-1 truncate text-left">{{ organization?.name }}</span>
       <PhCaretUpDown
         :size="14"
-        class="shrink-0 text-ink/40"
+        class="shrink-0 text-ink/65"
         aria-hidden="true"
       />
     </button>
@@ -51,7 +51,7 @@ const items = computed<MenuItem[]>(() => organizations.value.map(item => ({
   >
     <PhBuildings
       :size="16"
-      class="shrink-0 text-ink/45"
+      class="shrink-0 text-ink/65"
       aria-hidden="true"
     />
     <span class="truncate">{{ organization.name }}</span>

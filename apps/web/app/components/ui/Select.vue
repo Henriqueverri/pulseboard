@@ -58,7 +58,7 @@ const model = defineModel<T>()
       />
       <PhCaretDown
         :size="14"
-        class="shrink-0 text-ink/45"
+        class="shrink-0 text-ink/65"
         aria-hidden="true"
       />
     </SelectTrigger>

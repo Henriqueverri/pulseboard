@@ -14,7 +14,7 @@ defineProps<{
         </h1>
         <p
           v-if="description || $slots.description"
-          class="mt-1 text-sm text-ink/55"
+          class="mt-1 text-sm text-ink/65"
         >
           <slot name="description">
             {{ description }}

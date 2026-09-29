@@ -61,7 +61,7 @@ const chartLabel = computed(() => `Distribuição de ${formatInteger(total.value
             <p class="text-xl font-semibold text-ink tabular">
               {{ formatInteger(total) }}
             </p>
-            <p class="text-[11px] text-ink/50">
+            <p class="text-[11px] text-ink/65">
               transações
             </p>
           </div>
@@ -83,7 +83,7 @@ const chartLabel = computed(() => `Distribuição de ${formatInteger(total.value
           </span>
           <span class="flex items-baseline gap-3 tabular">
             <span class="font-medium text-ink">{{ formatInteger(row.orders.value) }}</span>
-            <span class="w-12 text-right text-xs text-ink/50">{{ formatPercent(row.percentage.value) }}</span>
+            <span class="w-12 text-right text-xs text-ink/65">{{ formatPercent(row.percentage.value) }}</span>
           </span>
         </li>
       </ul>

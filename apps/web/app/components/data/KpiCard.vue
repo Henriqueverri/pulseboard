@@ -16,7 +16,7 @@ const previous = computed(() => props.format(props.metric.previous))
 
 <template>
   <div class="flex min-w-0 flex-col rounded-2xl border border-ink/[0.06] bg-surface p-4 sm:p-5">
-    <p class="text-sm text-ink/55">
+    <p class="text-sm text-ink/65">
       {{ label }}
     </p>
     <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -28,7 +28,7 @@ const previous = computed(() => props.format(props.metric.previous))
         :polarity="polarity"
       />
     </div>
-    <p class="mt-1 text-xs text-ink/50 tabular">
+    <p class="mt-1 text-xs text-ink/65 tabular">
       vs {{ previous }} no período anterior
     </p>
   </div>

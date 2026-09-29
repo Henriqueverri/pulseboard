@@ -28,7 +28,7 @@ const route = useRoute()
           class="relative -mb-px inline-flex h-10 items-center border-b-2 px-3 text-sm font-medium transition-colors"
           :class="route.path.startsWith(tab.match)
             ? 'border-ink text-ink'
-            : 'border-transparent text-ink/55 hover:text-ink'"
+            : 'border-transparent text-ink/65 hover:text-ink'"
           :aria-current="route.path.startsWith(tab.match) ? 'page' : undefined"
         >
           {{ tab.label }}

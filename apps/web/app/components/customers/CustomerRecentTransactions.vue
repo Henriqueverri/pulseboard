@@ -50,7 +50,7 @@ const { currency, timezone } = useOrganization()
             <p class="text-sm font-medium text-ink tabular">
               {{ formatMoney(transaction.total_amount, currency) }}
             </p>
-            <p class="text-xs text-ink/50 tabular">
+            <p class="text-xs text-ink/65 tabular">
               {{ formatDateTime(transaction.occurred_at, timezone, { time: true }) }}
             </p>
           </div>

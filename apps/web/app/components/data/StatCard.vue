@@ -8,7 +8,7 @@ defineProps<{
 
 <template>
   <div class="rounded-2xl border border-ink/[0.06] bg-surface p-5">
-    <p class="text-sm text-ink/55">
+    <p class="text-sm text-ink/65">
       {{ label }}
     </p>
     <p class="mt-2 text-2xl font-semibold tracking-tight text-ink tabular">
@@ -16,7 +16,7 @@ defineProps<{
     </p>
     <p
       v-if="hint"
-      class="mt-1 text-xs text-ink/50"
+      class="mt-1 text-xs text-ink/65"
     >
       {{ hint }}
     </p>

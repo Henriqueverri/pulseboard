@@ -120,13 +120,13 @@ const money = (value: string | null) => formatMoney(value, currency.value)
             <span class="size-2 rounded-full bg-brand-500" />
             <span class="text-ink/70">Novos</span>
             <span class="font-medium tabular">{{ formatInteger(mix.newCount) }}</span>
-            <span class="text-xs text-ink/50 tabular">{{ formatPercent(mix.newShare * 100) }}</span>
+            <span class="text-xs text-ink/65 tabular">{{ formatPercent(mix.newShare * 100) }}</span>
           </li>
           <li class="flex items-center gap-2">
             <span class="size-2 rounded-full bg-purple" />
             <span class="text-ink/70">Recorrentes</span>
             <span class="font-medium tabular">{{ formatInteger(mix.returningCount) }}</span>
-            <span class="text-xs text-ink/50 tabular">{{ formatPercent(mix.returningShare * 100) }}</span>
+            <span class="text-xs text-ink/65 tabular">{{ formatPercent(mix.returningShare * 100) }}</span>
           </li>
         </ul>
       </UiCard>
@@ -156,7 +156,7 @@ const money = (value: string | null) => formatMoney(value, currency.value)
           class="mt-3"
         >
           <template #cell-rank="{ row }">
-            <span class="text-xs font-semibold text-ink/50 tabular">{{ row.rank }}º</span>
+            <span class="text-xs font-semibold text-ink/65 tabular">{{ row.rank }}º</span>
           </template>
           <template #cell-customer="{ row }">
             <div class="flex min-w-0 items-center gap-3">
@@ -185,10 +185,10 @@ const money = (value: string | null) => formatMoney(value, currency.value)
                     Removido
                   </UiTag>
                 </div>
-                <p class="truncate text-xs text-ink/50">
+                <p class="truncate text-xs text-ink/65">
                   {{ row.customer.email }}
                 </p>
-                <p class="text-xs text-ink/50 sm:hidden">
+                <p class="text-xs text-ink/65 sm:hidden">
                   {{ formatInteger(row.orders.value) }} pedidos
                 </p>
               </div>

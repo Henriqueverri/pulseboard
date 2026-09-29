@@ -100,7 +100,7 @@ const money = (value: string | null) => formatMoney(value, currency.value)
           class="mt-3"
         >
           <template #cell-rank="{ row }">
-            <span class="text-xs font-semibold text-ink/50 tabular">{{ row.rank }}º</span>
+            <span class="text-xs font-semibold text-ink/65 tabular">{{ row.rank }}º</span>
           </template>
           <template #cell-product="{ row }">
             <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -129,11 +129,11 @@ const money = (value: string | null) => formatMoney(value, currency.value)
             </div>
             <p
               v-if="row.product.sku"
-              class="font-mono text-xs text-ink/50"
+              class="font-mono text-xs text-ink/65"
             >
               {{ row.product.sku }}
             </p>
-            <p class="text-xs text-ink/50 sm:hidden">
+            <p class="text-xs text-ink/65 sm:hidden">
               {{ formatInteger(row.units_sold.value) }} un.
             </p>
           </template>

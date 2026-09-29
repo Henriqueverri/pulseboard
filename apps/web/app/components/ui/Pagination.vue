@@ -69,7 +69,7 @@ function go(page: number) {
     aria-label="Paginação"
   >
     <div class="flex items-center gap-4">
-      <p class="text-xs text-ink/55 tabular">
+      <p class="text-xs text-ink/65 tabular">
         <template v-if="meta.total > 0">
           Mostrando <span class="font-medium text-ink">{{ formatInteger(meta.from) }}–{{ formatInteger(meta.to) }}</span>
           de <span class="font-medium text-ink">{{ formatInteger(meta.total) }}</span>
@@ -80,7 +80,7 @@ function go(page: number) {
       </p>
       <div
         v-if="perPage"
-        class="hidden items-center gap-2 whitespace-nowrap text-xs text-ink/55 sm:flex"
+        class="hidden items-center gap-2 whitespace-nowrap text-xs text-ink/65 sm:flex"
       >
         <span aria-hidden="true">Por página</span>
         <UiSelect
@@ -107,7 +107,7 @@ function go(page: number) {
       >
         <PhCaretLeft :size="16" />
       </UiButton>
-      <span class="px-2 text-xs text-ink/60 tabular sm:hidden">
+      <span class="px-2 text-xs text-ink/65 tabular sm:hidden">
         {{ meta.current_page }} / {{ meta.last_page }}
       </span>
       <template
@@ -116,7 +116,7 @@ function go(page: number) {
       >
         <span
           v-if="item === 'gap'"
-          class="hidden w-6 text-center text-xs text-ink/40 sm:inline"
+          class="hidden w-6 text-center text-xs text-ink/65 sm:inline"
           aria-hidden="true"
         >…</span>
         <button

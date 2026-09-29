@@ -148,7 +148,7 @@ describe('ChangeIndicator', () => {
     })
 
     expect(wrapper.text()).toContain('—')
-    expect(wrapper.classes()).toContain('text-ink/40')
+    expect(wrapper.classes()).toContain('text-ink/65')
     expect(wrapper.find('svg').exists()).toBe(false)
   })
 })

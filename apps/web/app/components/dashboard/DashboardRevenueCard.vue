@@ -56,15 +56,17 @@ const empty = computed(() => {
           {{ formatMoney(response.summary.revenue.value, currency) }}
         </span>
         <ChangeIndicator :metric="response.summary.revenue" />
-        <span class="text-xs text-ink/50 tabular">
+        <span class="text-xs text-ink/65 tabular">
           {{ formatInteger(response.summary.orders.value) }} pedidos
         </span>
       </p>
-      <LazyRevenueChart
-        :buckets="response.data"
-        :granularity="response.meta.granularity"
-        :currency="currency"
-      />
+      <div class="min-h-64 sm:min-h-72">
+        <LazyRevenueChart
+          :buckets="response.data"
+          :granularity="response.meta.granularity"
+          :currency="currency"
+        />
+      </div>
     </template>
   </DataCard>
 </template>

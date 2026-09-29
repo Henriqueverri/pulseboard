@@ -20,7 +20,7 @@ withDefaults(defineProps<{
     :class="compact ? 'gap-2 px-4 py-8' : 'gap-3 px-6 py-14'"
   >
     <span
-      class="flex items-center justify-center rounded-xl bg-ink/[0.04] text-ink/40"
+      class="flex items-center justify-center rounded-xl bg-ink/[0.04] text-ink/65"
       :class="compact ? 'size-9' : 'size-11'"
       aria-hidden="true"
     >
@@ -35,7 +35,7 @@ withDefaults(defineProps<{
       </p>
       <p
         v-if="description"
-        class="mt-1 text-xs text-ink/55"
+        class="mt-1 text-xs text-ink/65"
       >
         {{ description }}
       </p>

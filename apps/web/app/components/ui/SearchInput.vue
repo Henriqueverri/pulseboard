@@ -59,7 +59,7 @@ function clear() {
     >
       <button
         type="button"
-        class="rounded p-0.5 text-ink/45 hover:bg-ink/5 hover:text-ink"
+        class="rounded p-0.5 text-ink/65 hover:bg-ink/5 hover:text-ink"
         aria-label="Limpar busca"
         @click="clear"
       >

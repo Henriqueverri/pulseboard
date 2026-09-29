@@ -37,7 +37,7 @@ async function onSubmit() {
     <h1 class="text-2xl font-semibold tracking-tight">
       Entrar
     </h1>
-    <p class="mt-1.5 text-sm text-ink/55">
+    <p class="mt-1.5 text-sm text-ink/65">
       Acesse o painel da sua organização.
     </p>
 
@@ -102,7 +102,7 @@ async function onSubmit() {
       </UiButton>
     </form>
 
-    <p class="mt-8 text-center text-sm text-ink/55">
+    <p class="mt-8 text-center text-sm text-ink/65">
       Ainda não tem conta?
       <NuxtLink
         to="/register"

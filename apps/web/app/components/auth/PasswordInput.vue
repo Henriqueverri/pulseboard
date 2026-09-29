@@ -24,7 +24,7 @@ const visible = ref(false)
     <template #trailing>
       <button
         type="button"
-        class="-mr-1 flex size-7 items-center justify-center rounded-md text-ink/45 hover:bg-ink/[0.05] hover:text-ink"
+        class="-mr-1 flex size-7 items-center justify-center rounded-md text-ink/65 hover:bg-ink/[0.05] hover:text-ink"
         :aria-label="visible ? 'Ocultar senha' : 'Mostrar senha'"
         :aria-pressed="visible"
         @click="visible = !visible"

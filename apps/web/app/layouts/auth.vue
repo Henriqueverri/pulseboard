@@ -50,7 +50,7 @@ const highlights = [
         </ul>
       </div>
 
-      <p class="relative text-xs text-white/40">
+      <p class="relative text-xs text-white/65">
         © {{ new Date().getFullYear() }} PulseBoard
       </p>
     </aside>

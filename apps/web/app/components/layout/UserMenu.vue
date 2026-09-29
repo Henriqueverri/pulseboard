@@ -49,7 +49,7 @@ const items: MenuItem[] = [
           <p class="truncate text-sm font-medium text-ink">
             {{ user?.name }}
           </p>
-          <p class="truncate text-xs text-ink/55">
+          <p class="truncate text-xs text-ink/65">
             {{ user?.email }}
           </p>
         </div>

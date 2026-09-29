@@ -57,7 +57,7 @@ const NuxtLink = resolveComponent('NuxtLink')
         <slot name="header">
           <DropdownMenuLabel
             v-if="label"
-            class="px-2 py-1.5 text-xs font-medium text-ink/50"
+            class="px-2 py-1.5 text-xs font-medium text-ink/65"
           >
             {{ label }}
           </DropdownMenuLabel>

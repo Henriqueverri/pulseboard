@@ -33,7 +33,7 @@ const to = defineModel<string>('to', { default: '' })
       class="min-w-0 tabular"
     />
     <span
-      class="shrink-0 text-xs text-ink/45"
+      class="shrink-0 text-xs text-ink/65"
       aria-hidden="true"
     >até</span>
     <UiInput

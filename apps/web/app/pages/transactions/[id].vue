@@ -88,7 +88,7 @@ const columns: DataColumn[] = [
               size="sm"
             />
             <span class="tabular">{{ occurredAt }}</span>
-            <span class="font-mono text-xs text-ink/40">{{ transaction.id }}</span>
+            <span class="font-mono text-xs text-ink/65">{{ transaction.id }}</span>
           </span>
         </template>
       </PageHeader>
@@ -126,7 +126,7 @@ const columns: DataColumn[] = [
                   Removido
                 </UiTag>
               </div>
-              <p class="text-xs text-ink/50">
+              <p class="text-xs text-ink/65">
                 <span class="font-mono">{{ row.product.sku ?? 'Sem SKU' }}</span>
                 <span class="sm:hidden"> · {{ formatMoney(row.unit_price, currency) }} cada</span>
               </p>
@@ -150,7 +150,7 @@ const columns: DataColumn[] = [
           </DataTable>
           <template #footer>
             <div class="flex w-full items-center justify-between text-sm">
-              <span class="text-ink/55">Total da transação</span>
+              <span class="text-ink/65">Total da transação</span>
               <span class="text-base font-semibold tabular">{{ formatMoney(transaction.total_amount, currency) }}</span>
             </div>
           </template>
@@ -166,7 +166,7 @@ const columns: DataColumn[] = [
           </div>
           <p
             v-if="transaction.customer.is_deleted"
-            class="mt-3 text-xs text-ink/50"
+            class="mt-3 text-xs text-ink/65"
           >
             O cliente foi removido; a transação preserva o histórico.
           </p>

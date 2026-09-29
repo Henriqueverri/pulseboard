@@ -29,7 +29,7 @@ withDefaults(defineProps<{
           </h2>
           <p
             v-if="description"
-            class="mt-0.5 text-xs text-ink/55"
+            class="mt-0.5 text-xs text-ink/65"
           >
             {{ description }}
           </p>

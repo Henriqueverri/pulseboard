@@ -1,4 +1,6 @@
 <script setup lang="ts" generic="T">
+import { useResizeObserver } from '@vueuse/core'
+
 export interface DataColumn {
   key: string
   label: string
@@ -48,15 +50,30 @@ function valueOf(row: T, key: string): unknown {
 }
 
 const showEmpty = computed(() => !props.loading && props.rows.length === 0)
+
+// A horizontally scrollable table must be reachable by keyboard to be scrolled.
+const containerEl = useTemplateRef<HTMLElement>('container')
+const tableEl = useTemplateRef<HTMLElement>('table')
+const scrollable = ref(false)
+
+useResizeObserver([containerEl, tableEl], () => {
+  const element = containerEl.value
+  scrollable.value = element ? element.scrollWidth > element.clientWidth : false
+})
 </script>
 
 <template>
   <div
-    class="relative overflow-x-auto"
+    ref="container"
+    class="relative overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-500"
     :aria-busy="loading || busy || undefined"
+    :tabindex="scrollable ? 0 : undefined"
+    :role="scrollable ? 'region' : undefined"
+    :aria-label="scrollable ? caption : undefined"
   >
     <table
       v-if="!showEmpty"
+      ref="table"
       class="w-full border-collapse text-sm"
     >
       <caption class="sr-only">
@@ -68,7 +85,7 @@ const showEmpty = computed(() => !props.loading && props.rows.length === 0)
             v-for="column in columns"
             :key="column.key"
             scope="col"
-            class="h-10 whitespace-nowrap px-4 text-xs font-medium text-ink/50 first:pl-5 last:pr-5"
+            class="h-10 whitespace-nowrap px-4 text-xs font-medium text-ink/65 first:pl-5 last:pr-5"
             :class="cellClass(column)"
           >
             <span :class="column.srOnlyLabel ? 'sr-only' : ''">{{ column.label }}</span>

@@ -30,7 +30,7 @@ const menuItems = [
       <h1 class="text-2xl font-semibold">
         UI primitives
       </h1>
-      <p class="text-sm text-ink/55">
+      <p class="text-sm text-ink/65">
         Catálogo de desenvolvimento (não incluído no build de produção).
       </p>
     </header>

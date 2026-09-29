@@ -48,7 +48,7 @@ function onBlur() {
     @blur="onBlur"
   >
     <template #leading>
-      <span class="text-sm text-ink/50">{{ currencySymbol }}</span>
+      <span class="text-sm text-ink/65">{{ currencySymbol }}</span>
     </template>
   </UiInput>
 </template>

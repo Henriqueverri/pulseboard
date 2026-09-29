@@ -143,8 +143,8 @@ async function onSaved(product: Product, mode: 'created' | 'updated') {
           >
             {{ row.name }}
           </NuxtLink>
-          <p class="mt-0.5 flex items-center gap-2 text-xs text-ink/50 md:hidden">
-            <span>{{ row.sku ?? 'Sem SKU' }}</span>
+          <p class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink/65 md:hidden">
+            <span class="whitespace-nowrap">{{ row.sku ?? 'Sem SKU' }}</span>
             <StatusBadge
               v-if="row.status === 'inactive'"
               :status="row.status"
@@ -160,7 +160,7 @@ async function onSaved(product: Product, mode: 'created' | 'updated') {
           >{{ row.sku }}</span>
           <span
             v-else
-            class="text-ink/35"
+            class="text-ink/65"
           >{{ EMPTY_VALUE }}</span>
         </template>
         <template #cell-price="{ row }">

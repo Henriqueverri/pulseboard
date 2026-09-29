@@ -89,7 +89,7 @@ const columns = [
                 <p class="text-2xl font-semibold text-ink tabular">
                   {{ formatInteger(total) }}
                 </p>
-                <p class="text-xs text-ink/50">
+                <p class="text-xs text-ink/65">
                   transações
                 </p>
               </div>
@@ -122,7 +122,7 @@ const columns = [
                 />
                 {{ TRANSACTION_STATUS_LABELS[row.status] }}
               </span>
-              <span class="text-xs text-ink/50 tabular sm:hidden">
+              <span class="text-xs text-ink/65 tabular sm:hidden">
                 {{ formatMoney(row.revenue.value, currency) }}
               </span>
             </template>
@@ -171,7 +171,7 @@ const columns = [
             </template>
           </DataTable>
           <template #footer>
-            <p class="text-xs text-ink/50">
+            <p class="text-xs text-ink/65">
               Participação = parcela das transações do período. "—" quando o período não tem transações.
             </p>
           </template>

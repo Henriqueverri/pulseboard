@@ -44,7 +44,7 @@ function goHome() {
     <h1 class="mt-2 text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
       {{ title }}
     </h1>
-    <p class="mt-3 max-w-md text-sm text-ink/60">
+    <p class="mt-3 max-w-md text-sm text-ink/65">
       {{ description }}
     </p>
     <div class="mt-8 flex flex-wrap justify-center gap-2">

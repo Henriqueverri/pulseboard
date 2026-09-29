@@ -43,7 +43,7 @@ async function onSubmit() {
     <h1 class="text-2xl font-semibold tracking-tight">
       Criar conta
     </h1>
-    <p class="mt-1.5 text-sm text-ink/55">
+    <p class="mt-1.5 text-sm text-ink/65">
       Uma organização é criada para você, com você como owner.
     </p>
 
@@ -146,7 +146,7 @@ async function onSubmit() {
       </UiButton>
     </form>
 
-    <p class="mt-8 text-center text-sm text-ink/55">
+    <p class="mt-8 text-center text-sm text-ink/65">
       Já tem conta?
       <NuxtLink
         to="/login"

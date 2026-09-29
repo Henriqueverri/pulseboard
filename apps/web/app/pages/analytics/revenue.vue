@@ -102,14 +102,18 @@ const money = (value: string | null) => formatMoney(value, currency.value)
         <template #skeleton>
           <UiSkeleton class="h-64 w-full rounded-lg sm:h-72" />
         </template>
-        <LazyRevenueChart
+        <div
           v-if="data"
-          :buckets="data.data"
-          :granularity="data.meta.granularity"
-          :currency="currency"
-          :metric="metric"
-          :sr-table="false"
-        />
+          class="min-h-64 sm:min-h-72"
+        >
+          <LazyRevenueChart
+            :buckets="data.data"
+            :granularity="data.meta.granularity"
+            :currency="currency"
+            :metric="metric"
+            :sr-table="false"
+          />
+        </div>
       </DataCard>
 
       <UiCard

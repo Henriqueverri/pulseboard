@@ -29,7 +29,7 @@ const icon = computed(() => ({
     :class="[
       size === 'sm' ? 'h-5 px-1 text-[11px]' : 'h-6 px-1.5 text-xs',
       description.trend === 'none'
-        ? 'text-ink/40'
+        ? 'text-ink/65'
         : description.tone === 'positive'
           ? 'bg-success-soft text-success-strong'
           : description.tone === 'negative'
