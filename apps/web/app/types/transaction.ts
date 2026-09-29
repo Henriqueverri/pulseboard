@@ -5,6 +5,13 @@ export type TransactionStatus = 'paid' | 'pending' | 'refunded' | 'canceled'
 /** API order of statuses (also used by `/analytics/transactions`). */
 export const TRANSACTION_STATUSES: readonly TransactionStatus[] = ['paid', 'refunded', 'pending', 'canceled']
 
+export const TRANSACTION_STATUS_LABELS: Record<TransactionStatus, string> = {
+  paid: 'Pago',
+  refunded: 'Reembolsado',
+  pending: 'Pendente',
+  canceled: 'Cancelado',
+}
+
 /** `TransactionResource` without relations (e.g. a customer's recent transactions). */
 export interface TransactionSummary {
   id: string

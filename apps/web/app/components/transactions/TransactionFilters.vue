@@ -2,6 +2,7 @@
 import { PhFunnelSimple, PhX } from '@phosphor-icons/vue'
 import type { ListQuery } from '~/composables/useListQuery'
 import type { TransactionFilters } from '~/composables/useTransactions'
+import { TRANSACTION_STATUS_LABELS, TRANSACTION_STATUSES } from '~/types/transaction'
 import type { TransactionStatus } from '~/types/transaction'
 
 const props = defineProps<{
@@ -15,10 +16,7 @@ const sheetOpen = ref(false)
 
 const statusOptions = [
   { value: 'all', label: 'Todos os status' },
-  { value: 'paid', label: 'Pago' },
-  { value: 'pending', label: 'Pendente' },
-  { value: 'refunded', label: 'Reembolsado' },
-  { value: 'canceled', label: 'Cancelado' },
+  ...TRANSACTION_STATUSES.map(value => ({ value, label: TRANSACTION_STATUS_LABELS[value] })),
 ]
 
 const filters = computed(() => props.list.filters.value)
