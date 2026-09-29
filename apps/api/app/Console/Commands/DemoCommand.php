@@ -1,0 +1,144 @@
+<?php
+
+namespace App\Console\Commands;
+
+use App\Models\Customer;
+use App\Models\Organization;
+use App\Models\Product;
+use App\Models\Transaction;
+use App\Models\User;
+use Database\Seeders\DemoDataSeeder;
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Creates (or refreshes) the public demo organization without touching any other data.
+ *
+ * Safe to run on every deploy: without --refresh an existing demo is left as is (only the
+ * demo passwords are synced with DEMO_PASSWORD). --refresh rebuilds the demo organization's
+ * catalog and history so the 90-day history ends today again.
+ */
+class DemoCommand extends Command
+{
+    public const ORGANIZATION_SLUG = 'pulseboard-demo';
+
+    public const ORGANIZATION_NAME = 'PulseBoard Demo Store';
+
+    private const MIN_PASSWORD_LENGTH = 12;
+
+    protected $signature = 'pulseboard:demo
+        {--refresh : Delete the demo organization\'s products, customers and transactions and seed them again}';
+
+    protected $description = 'Create or refresh the public demo organization and its owner/member accounts';
+
+    public function handle(): int
+    {
+        $password = config('demo.password');
+
+        if (! is_string($password) || mb_strlen($password) < self::MIN_PASSWORD_LENGTH) {
+            $this->error('Set DEMO_PASSWORD (at least '.self::MIN_PASSWORD_LENGTH.' characters) before seeding the demo.');
+
+            return self::FAILURE;
+        }
+
+        $organization = Organization::query()->where('slug', self::ORGANIZATION_SLUG)->first();
+        $accounts = [
+            Organization::ROLE_OWNER => ['email' => config('demo.owner_email'), 'name' => 'Demo Owner'],
+            Organization::ROLE_MEMBER => ['email' => config('demo.member_email'), 'name' => 'Demo Member'],
+        ];
+
+        if ($problem = $this->conflict($organization, $accounts)) {
+            $this->error($problem);
+
+            return self::FAILURE;
+        }
+
+        if ($organization !== null && ! $this->option('refresh')) {
+            DB::transaction(fn () => $this->syncAccounts($organization, $accounts, $password));
+
+            $this->info('Demo organization already exists; passwords synced. Use --refresh to rebuild its data.');
+
+            return self::SUCCESS;
+        }
+
+        DB::transaction(function () use (&$organization, $accounts, $password): void {
+            if ($organization === null) {
+                $organization = Organization::query()->create([
+                    'name' => self::ORGANIZATION_NAME,
+                    'slug' => self::ORGANIZATION_SLUG,
+                    'currency' => 'BRL',
+                ]);
+            } else {
+                $this->wipe($organization);
+            }
+
+            $this->syncAccounts($organization, $accounts, $password);
+
+            (new DemoDataSeeder)->setContainer($this->laravel)->__invoke(['organization' => $organization]);
+        });
+
+        $this->info(sprintf(
+            'Demo organization seeded: %d products, %d customers, %d transactions.',
+            $organization->products()->count(),
+            $organization->customers()->count(),
+            $organization->transactions()->count(),
+        ));
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * The demo must never take over a real account or organization.
+     *
+     * @param  array<string, array{email: string, name: string}>  $accounts
+     */
+    private function conflict(?Organization $organization, array $accounts): ?string
+    {
+        if ($organization !== null) {
+            $owner = User::query()->where('email', $accounts[Organization::ROLE_OWNER]['email'])->first();
+
+            if ($owner === null || $owner->roleIn($organization) !== Organization::ROLE_OWNER) {
+                return 'The slug "'.self::ORGANIZATION_SLUG.'" belongs to an organization not owned by the demo owner.';
+            }
+        }
+
+        foreach ($accounts as ['email' => $email]) {
+            $user = User::query()->where('email', $email)->first();
+
+            if ($user === null) {
+                continue;
+            }
+
+            $otherOrganizations = $user->organizations()
+                ->when($organization, fn ($query) => $query->whereKeyNot($organization->id))
+                ->exists();
+
+            if ($organization === null || $otherOrganizations) {
+                return "{$email} is already used by an account outside the demo organization.";
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, array{email: string, name: string}>  $accounts
+     */
+    private function syncAccounts(Organization $organization, array $accounts, string $password): void
+    {
+        foreach ($accounts as $role => ['email' => $email, 'name' => $name]) {
+            $user = User::query()->firstOrNew(['email' => $email]);
+            $user->forceFill(['name' => $user->name ?? $name, 'password' => $password])->save();
+
+            $organization->users()->syncWithoutDetaching([$user->id => ['role' => $role]]);
+        }
+    }
+
+    private function wipe(Organization $organization): void
+    {
+        // Items cascade from transactions; they restrict product deletion, hence the order.
+        Transaction::query()->forOrganization($organization)->delete();
+        Customer::withTrashed()->forOrganization($organization)->forceDelete();
+        Product::withTrashed()->forOrganization($organization)->forceDelete();
+    }
+}

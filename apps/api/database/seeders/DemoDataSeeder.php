@@ -14,6 +14,7 @@ use Database\Factories\ProductFactory;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Deterministic ~90-day sales history for the dashboard demo.
@@ -25,12 +26,25 @@ use Illuminate\Support\Facades\DB;
  * - some products were deactivated 30 days ago and only appear in older sales;
  * - some prices rose 45 days ago, so older items keep the old unit_price snapshot;
  * - most transactions are paid, recent ones may be pending, a few are refunded/canceled.
+ *
+ * It also runs in production (`pulseboard:demo`), where Faker and model factories
+ * (require-dev) must not be needed: every value comes from the lists below and mt_rand().
  */
 class DemoDataSeeder extends Seeder
 {
     public const HISTORY_DAYS = 90;
 
     private const RANDOM_SEED = 20260928;
+
+    private const FIRST_NAMES = [
+        'Ana', 'Bruno', 'Camila', 'Diego', 'Eduarda', 'Felipe', 'Gabriela', 'Henrique', 'Isabela', 'João',
+        'Larissa', 'Marcos', 'Natália', 'Otávio', 'Patrícia', 'Rafael', 'Sofia', 'Thiago', 'Vanessa', 'Yuri',
+    ];
+
+    private const LAST_NAMES = [
+        'Almeida', 'Barbosa', 'Cardoso', 'Costa', 'Ferreira', 'Gomes', 'Lima', 'Martins', 'Mendes', 'Moreira',
+        'Nascimento', 'Oliveira', 'Pereira', 'Ribeiro', 'Rocha', 'Santos', 'Silva', 'Souza', 'Teixeira', 'Vieira',
+    ];
 
     private const DEACTIVATED_DAYS_AGO = 30;
 
@@ -41,8 +55,6 @@ class DemoDataSeeder extends Seeder
     public function run(Organization $organization): void
     {
         mt_srand(self::RANDOM_SEED);
-        fake()->seed(self::RANDOM_SEED);
-        fake('pt_BR')->seed(self::RANDOM_SEED);
 
         $today = CarbonImmutable::today();
 
@@ -70,7 +82,8 @@ class DemoDataSeeder extends Seeder
                 $position = $products->count();
                 $inactive = in_array($position, [7, 15, 26, 33], true);
 
-                $product = Product::factory()->create([
+                $product = new Product;
+                $product->forceFill([
                     'organization_id' => $organization->id,
                     'name' => "{$name} {$variant}",
                     'sku' => sprintf('PB-%03d-%s', $index + 1, strtoupper(substr($variant, 0, 3))),
@@ -78,7 +91,7 @@ class DemoDataSeeder extends Seeder
                     'status' => $inactive ? ProductStatus::Inactive : ProductStatus::Active,
                     'created_at' => $createdAt,
                     'updated_at' => $inactive ? $today->subDays(self::DEACTIVATED_DAYS_AGO) : $createdAt,
-                ]);
+                ])->save();
 
                 $products->push([
                     'model' => $product,
@@ -107,12 +120,17 @@ class DemoDataSeeder extends Seeder
         foreach ($tiers as $tier) {
             for ($i = 0; $i < $tier['count']; $i++) {
                 $createdAt = $today->subDays(mt_rand(self::HISTORY_DAYS + 5, self::HISTORY_DAYS + 200));
+                $first = self::FIRST_NAMES[mt_rand(0, count(self::FIRST_NAMES) - 1)];
+                $last = self::LAST_NAMES[mt_rand(0, count(self::LAST_NAMES) - 1)];
 
-                $customer = Customer::factory()->create([
+                $customer = new Customer;
+                $customer->forceFill([
                     'organization_id' => $organization->id,
+                    'name' => "{$first} {$last}",
+                    'email' => sprintf('%s.%s.%02d@example.com', Str::slug($first), Str::slug($last), $customers->count() + 1),
                     'created_at' => $createdAt,
                     'updated_at' => $createdAt,
-                ]);
+                ])->save();
 
                 $customers->push(['model' => $customer, 'weight' => $tier['weight']]);
             }
