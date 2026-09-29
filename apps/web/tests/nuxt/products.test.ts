@@ -8,6 +8,7 @@ import { ApiError } from '~/utils/api-error'
 import { changedFields } from '~/composables/useProducts'
 import ProductFormDialog from '~/components/products/ProductFormDialog.vue'
 import ProductsPage from '~/pages/products/index.vue'
+import { clickButton, field, menuItems, paginated, type } from '../support/dom'
 
 const repository = vi.hoisted(() => ({
   list: vi.fn(),
@@ -36,32 +37,8 @@ const product: Product = {
   updated_at: '2026-09-01T12:00:00Z',
 }
 
-function page(data: Product[]) {
-  return {
-    data,
-    links: { first: null, last: null, prev: null, next: null },
-    meta: { current_page: 1, from: data.length ? 1 : null, last_page: 1, per_page: 15, to: data.length || null, total: data.length, path: '' },
-  }
-}
-
-const input = (element: Element | null) => element as HTMLInputElement
-
-function field(label: string): HTMLInputElement {
-  const labelElement = [...document.querySelectorAll('label')].find(item => item.textContent?.trim().startsWith(label))
-  return input(document.getElementById(labelElement!.htmlFor))
-}
-
-async function type(element: HTMLInputElement, value: string) {
-  element.value = value
-  element.dispatchEvent(new Event('input'))
-  await flushPromises()
-}
-
-async function submit(label: string) {
-  const button = [...document.querySelectorAll('button')].find(item => item.textContent?.includes(label))
-  button!.click()
-  await flushPromises()
-}
+const page = paginated<Product>
+const submit = clickButton
 
 describe('changedFields', () => {
   it('returns only what changed, comparing prices as amounts', () => {
@@ -160,7 +137,7 @@ describe('products page', () => {
     await wrapper.get(`button[aria-label="Ações de ${product.name}"]`).trigger('keydown', { key: 'Enter' })
     await flushPromises()
 
-    const items = [...document.querySelectorAll('[role="menuitem"]')].map(item => item.textContent?.trim())
+    const items = menuItems()
     wrapper.unmount()
 
     return items
