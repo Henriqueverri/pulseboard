@@ -2,14 +2,14 @@
 
 SaaS de analytics para pequenos negócios acompanharem vendas, receita, clientes e indicadores em um dashboard.
 
-Este repositório é um monorepo de portfólio full stack. O backend já entrega autenticação Sanctum SPA (cookie), multi-tenancy por Organization, CRUD de produtos e clientes, transações somente leitura e a API de analytics (dashboard, receita, produtos, clientes e status).
+Este repositório é um monorepo de portfólio full stack: API Laravel com autenticação Sanctum SPA (cookie), multi-tenancy por Organization, CRUD de produtos e clientes, transações somente leitura e analytics (dashboard, receita, produtos, clientes e status); SPA Nuxt que consome essa API (detalhes do front em [`apps/web/README.md`](apps/web/README.md)).
 
 ## Stack
 
 | Camada | Tecnologia |
 |--------|------------|
 | Frontend | Nuxt 4, Vue 3, TypeScript, Tailwind CSS, Pinia |
-| Backend | Laravel 12, PHP 8.2+, API REST, Sanctum SPA |
+| Backend | Laravel 12, PHP 8.4+, API REST, Sanctum SPA |
 | Banco | PostgreSQL 16 |
 | Package FE | bun |
 | Infra local | Docker Compose (somente Postgres no MVP) |
@@ -21,7 +21,7 @@ pulseboard/
 ├── apps/
 │   ├── web/          # Nuxt 4
 │   └── api/          # Laravel 12
-├── .github/
+├── .github/workflows/ci.yml
 ├── docker-compose.yml
 ├── README.md
 └── .gitignore
@@ -29,7 +29,7 @@ pulseboard/
 
 ## Pré-requisitos
 
-- PHP 8.2+ com extensões `pdo_pgsql` / `pgsql`
+- PHP 8.4+ com extensão `pdo_pgsql` (o `composer.lock` usa componentes Symfony 8)
 - Composer 2
 - bun
 - Docker + Docker Compose
@@ -79,6 +79,71 @@ bun run dev
 - Frontend: http://localhost:3000  
 - Login: http://localhost:3000/login  
 - Register: http://localhost:3000/register  
+
+O front precisa rodar em `localhost:3000`: é a única origem liberada em CORS e em `SANCTUM_STATEFUL_DOMAINS` no `.env` local.
+
+## Testes e qualidade
+
+### API
+
+```bash
+cd apps/api
+php artisan test          # SQLite em memória (padrão do phpunit.xml)
+vendor/bin/pint --test    # estilo (vendor/bin/pint corrige)
+```
+
+No SQLite, 2 testes de horário de verão (buckets exatos por timezone) são pulados: eles exigem PostgreSQL, que é o banco de produção. Para rodar a suíte inteira em PostgreSQL (como a CI), use um banco separado — `RefreshDatabase` apaga o banco usado:
+
+```bash
+docker exec pulseboard-postgres createdb -U pulseboard pulseboard_test
+DB_CONNECTION=pgsql DB_DATABASE=pulseboard_test php artisan test
+```
+
+### Web
+
+```bash
+cd apps/web
+bun run test        # Vitest
+bun run typecheck
+bun run lint        # bun run lint:fix corrige
+bun run generate    # build estático em .output/public
+```
+
+### E2E (Playwright)
+
+O smoke faz login, abre o dashboard, cria/edita/remove um produto, abre uma transação e navega pelas abas de analytics. Ele escreve no banco, então use um banco descartável com o seed, nunca o de desenvolvimento. Com o front de produção servido em `localhost:3000` (pare o `bun run dev` antes):
+
+```bash
+docker exec pulseboard-postgres createdb -U pulseboard pulseboard_e2e
+
+# terminal 1 — API no banco descartável
+cd apps/api
+DB_DATABASE=pulseboard_e2e php artisan migrate:fresh --seed --force
+DB_DATABASE=pulseboard_e2e php artisan serve --port=8001
+
+# terminal 2 — build de produção apontando para essa API
+cd apps/web
+NUXT_PUBLIC_API_URL=http://localhost:8001/api/v1 NUXT_PUBLIC_API_ORIGIN=http://localhost:8001 bun run generate
+bun run serve:static
+
+# terminal 3
+cd apps/web
+bun run test:e2e
+```
+
+`serve:static` serve o build como o Cloudflare Pages em modo SPA (qualquer rota desconhecida recebe o `index.html`). O Playwright usa o Google Chrome instalado (`E2E_CHANNEL` troca o canal).
+
+## CI
+
+`.github/workflows/ci.yml` roda em push na `main` e em pull requests:
+
+| Job | O que valida |
+|-----|--------------|
+| `api` | `composer install`, Pint, `migrate` em PostgreSQL 16 limpo, PHPUnit completo em PostgreSQL (sem os skips do SQLite) |
+| `web` | `bun install --frozen-lockfile`, lint, typecheck, Vitest, `nuxt generate` |
+| `e2e` | PostgreSQL descartável com `migrate:fresh --seed` → API (`artisan serve`) → build estático (`serve:static`) → Playwright; logs e traces como artefato em caso de falha |
+
+Deploy não roda na CI: Railway e Cloudflare Pages fazem deploy pela integração nativa com o GitHub.
 
 ## Autenticação (Sanctum SPA)
 
@@ -504,10 +569,85 @@ Uma única consulta agregada por request (agrupada por status, período anterior
 
 | Arquivo | Uso |
 |---------|-----|
-| `apps/api/.env.example` | API, Postgres, `FRONTEND_URL`, `SANCTUM_STATEFUL_DOMAINS` |
+| `apps/api/.env.example` | API, Postgres, `FRONTEND_URL`, `SANCTUM_STATEFUL_DOMAINS`, `TRUSTED_PROXIES` |
 | `apps/web/.env.example` | `NUXT_PUBLIC_API_URL`, `NUXT_PUBLIC_API_ORIGIN` |
 
 Não commite arquivos `.env` com secrets.
+
+## Produção
+
+Destino planejado: API no **Railway** (com PostgreSQL do Railway) e front estático no **Cloudflare Pages**, ambos com deploy pela integração do GitHub.
+
+### Requisito de domínio
+
+A autenticação é Sanctum SPA: sessão em cookie httpOnly `SameSite=Lax` e CSRF pelo cookie `XSRF-TOKEN`, que o front lê via `document.cookie` e devolve no header `X-XSRF-TOKEN`. Isso só funciona se front e API estiverem no **mesmo site** (mesmo domínio registrável), por exemplo `app.seudominio.com` e `api.seudominio.com` com `SESSION_DOMAIN=.seudominio.com`.
+
+As URLs padrão (`*.pages.dev` e `*.up.railway.app`) são sites diferentes — os dois sufixos estão na Public Suffix List. Nelas o navegador não envia o cookie de sessão nas chamadas da API e o front não consegue ler o `XSRF-TOKEN`, então **o login não funciona sem um domínio próprio** (ou sem um proxy que coloque a API na mesma origem do front).
+
+### API no Railway
+
+Serviço a partir deste repositório, com **Root Directory** `apps/api`. O builder padrão (Railpack) detecta o Laravel, instala PHP 8.4 e `pdo_pgsql` a partir do `composer.json`, e a cada start roda `php artisan migrate --force`, `storage:link` e `optimize` (cache de config, rotas, eventos e views) antes de subir o FrankenPHP.
+
+Configurações do serviço:
+
+- Healthcheck path: `/api/v1/health` (200 com `{"status":"ok","database":"ok"}`, 503 se o banco não responde; não expõe versões nem erros).
+- Watch paths: `/apps/api/**` (evita redeploy da API em mudanças só do front).
+- Domínio: `api.seudominio.com` (custom domain do Railway, HTTPS automático).
+
+Variáveis:
+
+| Variável | Valor |
+|----------|-------|
+| `APP_NAME` | `PulseBoard` |
+| `APP_ENV` | `production` |
+| `APP_DEBUG` | `false` |
+| `APP_KEY` | gerar localmente com `php artisan key:generate --show` |
+| `APP_URL` | `https://api.seudominio.com` |
+| `FRONTEND_URL` | `https://app.seudominio.com` (origem exata liberada no CORS) |
+| `SANCTUM_STATEFUL_DOMAINS` | `app.seudominio.com` (host do front, sem esquema) |
+| `SESSION_DOMAIN` | `.seudominio.com` |
+| `SESSION_SECURE_COOKIE` | `true` |
+| `SESSION_SAME_SITE` | `lax` |
+| `SESSION_DRIVER` / `CACHE_STORE` | `database` (tabelas criadas pelas migrations; sem Redis) |
+| `TRUSTED_PROXIES` | `*` (a API só é acessível pelo proxy do Railway; sem isso o rate limit de login trata todos os usuários como o mesmo IP) |
+| `DB_CONNECTION` | `pgsql` |
+| `DB_URL` | `${{Postgres.DATABASE_URL}}` (referência ao serviço PostgreSQL do Railway) |
+| `LOG_CHANNEL` | `stderr` (logs aparecem no painel do Railway) |
+| `LOG_LEVEL` | `info` |
+
+Não há filas, jobs, e-mails nem storage de arquivos em uso: não é preciso worker, Redis ou volume.
+
+**Dados de demonstração:** o seed (`DatabaseSeeder`) espera banco vazio, não é idempotente, usa factories/Faker (dependências de desenvolvimento) e cria usuários com a senha `password`. Ele não roda no deploy; carregar dados de demo em produção é uma decisão à parte.
+
+### Front no Cloudflare Pages
+
+Projeto conectado ao repositório:
+
+| Configuração | Valor |
+|--------------|-------|
+| Root directory | `apps/web` |
+| Build command | `bun install --frozen-lockfile && bun run generate` |
+| Build output directory | `dist` |
+| Variáveis de build | `NUXT_PUBLIC_API_URL=https://api.seudominio.com/api/v1`, `NUXT_PUBLIC_API_ORIGIN=https://api.seudominio.com`, `BUN_VERSION=1.3.10` |
+| Domínio | `app.seudominio.com` |
+
+No Pages (`CF_PAGES`), o Nitro usa o preset `cloudflare-pages-static`: gera `dist/`, headers de cache imutável para `/_nuxt/*` e mescla o `public/_headers` (anti-clickjacking). As URLs da API são embutidas no HTML durante o build; se as duas variáveis faltarem, o build falha de propósito. Não há `404.html`, então o Pages usa o fallback de SPA e rotas como `/products/:id` abrem direto.
+
+### Checklist do primeiro deploy
+
+1. Domínio próprio com dois subdomínios (front e API).
+2. Railway: PostgreSQL + serviço da API com as variáveis acima e o custom domain.
+3. Conferir `https://api.seudominio.com/api/v1/health`.
+4. Cloudflare Pages com as variáveis de build e o custom domain.
+5. Login no front, criar/editar/remover um produto e navegar pelo analytics.
+
+## Limitações conhecidas
+
+- Sem domínio próprio compartilhado entre front e API, a autenticação não funciona em produção (ver acima). Previews do Pages (`<hash>.<projeto>.pages.dev`) também não autenticam: não estão no CORS nem no `SANCTUM_STATEFUL_DOMAINS`.
+- Um único ambiente de produção; sem staging.
+- Migrations rodam no start do container: seguro com uma réplica; com várias réplicas, mover para um pre-deploy command.
+- Sem monitoramento de erros externo: os logs são o `stderr` do Railway.
+- Suíte PHPUnit local em SQLite por padrão; a paridade com PostgreSQL é garantida na CI.
 
 ## Status do projeto
 
@@ -515,7 +655,7 @@ Não commite arquivos `.env` com secrets.
 - [x] Fase 2 — Authentication  
 - [x] Fase 3 — Core domain  
 - [x] Fase 4 — API de negócio: 4A Products + Customers, 4B Transactions (read-only) e 4C Analytics concluídas (4C.1 timezone + fundação, 4C.2 Dashboard, 4C.3 Revenue, 4C.4 Products, 4C.5 Customers, 4C.6 Transaction status, 4C.7 consistência + performance + docs)  
-- [ ] Fase 5 — Frontend de produto  
-- [ ] Fase 6 — Tests  
-- [ ] Fase 7 — CI/CD  
-- [ ] Fase 8 — Production  
+- [x] Frontend (F1–F10): auth, shell, CRUDs, transações, dashboard, analytics, acessibilidade e smoke E2E  
+- [x] CI (GitHub Actions: API em PostgreSQL, web, E2E)  
+- [x] Produção preparada (F11): configuração e documentação de deploy  
+- [ ] Deploy real (depende do domínio e das contas Railway/Cloudflare)  

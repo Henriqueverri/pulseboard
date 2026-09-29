@@ -18,6 +18,7 @@ bun run test         # Vitest (unit + nuxt environment)
 bun run typecheck
 bun run lint         # lint:fix para corrigir
 bun run generate     # build estático (.output/public)
+bun run serve:static # serve o build em :3000 com fallback de SPA (como o Cloudflare Pages)
 bun run test:e2e     # Playwright smoke (API + web rodando, seed aplicado)
 ```
 
@@ -28,7 +29,11 @@ Variáveis (`.env`):
 | `NUXT_PUBLIC_API_URL` | `http://localhost:8000/api/v1` |
 | `NUXT_PUBLIC_API_ORIGIN` | `http://localhost:8000` (usado para `/sanctum/csrf-cookie`) |
 
-O smoke e2e usa `test@example.com` / `password`, cria e remove um produto `E2E smoke <timestamp>` e aceita `E2E_BASE_URL` para apontar para outro host. Usa o Chrome instalado (`channel: 'chrome'`).
+As URLs da API são embutidas no HTML durante o `generate`: defina as variáveis no ambiente de build.
+
+O smoke e2e usa `test@example.com` / `password`, cria e remove um produto `E2E smoke <timestamp>` e aceita `E2E_BASE_URL` para apontar para outro host. Rode-o contra um banco descartável com o seed (passo a passo no [README da raiz](../../README.md#e2e-playwright)). Usa o Chrome instalado (`channel: 'chrome'`, ou `E2E_CHANNEL`).
+
+Deploy (Cloudflare Pages) e requisitos de domínio: [README da raiz](../../README.md#produção).
 
 ## Arquitetura
 
