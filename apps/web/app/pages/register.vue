@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ApiError } from '~/types/auth'
+import { ApiError } from '~/utils/api-error'
 
 definePageMeta({
   layout: 'auth',

@@ -1,26 +1,21 @@
-import type { AuthPayload, MePayload } from '~/types/auth'
+import type { AuthPayload, LoginInput, MePayload, RegisterInput } from '~/types/auth'
 
 export function useAuthRepository() {
   const { apiFetch } = useApiClient()
 
-  function register(payload: {
-    name: string
-    email: string
-    password: string
-    password_confirmation: string
-  }) {
+  function register(payload: RegisterInput) {
     return apiFetch<AuthPayload>('/auth/register', {
       method: 'POST',
-      body: payload,
+      body: { ...payload },
       auth: false,
       organizationId: null,
     })
   }
 
-  function login(payload: { email: string, password: string }) {
+  function login(payload: LoginInput) {
     return apiFetch<AuthPayload>('/auth/login', {
       method: 'POST',
-      body: payload,
+      body: { ...payload },
       auth: false,
       organizationId: null,
     })
@@ -30,13 +25,16 @@ export function useAuthRepository() {
     return apiFetch<{ message: string }>('/auth/logout', {
       method: 'POST',
       organizationId: null,
+      auth: false,
     })
   }
 
-  function me() {
+  /** `organizationId` selects `current_organization` (the API falls back to the first membership). */
+  function me(organizationId: string | null = null) {
     return apiFetch<MePayload>('/auth/me', {
       method: 'GET',
-      organizationId: null,
+      organizationId,
+      auth: false,
     })
   }
 

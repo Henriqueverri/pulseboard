@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens (SnowUI foundation + PulseBoard identity).
+ * Channels are space-separated RGB so Tailwind can apply `<alpha-value>`.
+ */
+:root {
+  --pb-ink: 28 28 28;
+  --pb-canvas: 249 249 250;
+  --pb-surface: 255 255 255;
+
+  --pb-brand-50: 243 243 254;
+  --pb-brand-100: 231 231 253;
+  --pb-brand-200: 206 206 252;
+  --pb-brand-300: 173 173 251;
+  --pb-brand-400: 130 130 238;
+  --pb-brand-500: 107 107 226;
+  --pb-brand-600: 91 91 214;
+  --pb-brand-700: 72 72 184;
+
+  --pb-success: 113 221 140;
+  --pb-success-soft: 230 248 235;
+  --pb-success-strong: 26 118 58;
+
+  --pb-warning: 255 181 91;
+  --pb-warning-soft: 255 243 227;
+  --pb-warning-strong: 150 86 0;
+
+  --pb-info: 125 187 255;
+  --pb-info-soft: 232 243 255;
+  --pb-info-strong: 25 94 168;
+
+  --pb-danger: 255 71 71;
+  --pb-danger-soft: 255 235 235;
+  --pb-danger-strong: 190 30 30;
+
+  --pb-purple: 184 153 235;
+}
+
+@layer base {
+  html {
+    @apply bg-canvas text-ink antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply min-h-screen text-sm;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-500/60 ring-offset-2 ring-offset-surface;
+  }
+
+  ::selection {
+    @apply bg-brand-200 text-ink;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}

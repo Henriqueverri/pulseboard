@@ -1,15 +1,19 @@
+export type OrganizationRole = 'owner' | 'member'
+
 export interface User {
   id: string
   name: string
   email: string
 }
 
+/** `OrganizationResource`; `role` is present when loaded through the user's membership. */
 export interface Organization {
   id: string
   name: string
   slug: string
   currency: string
-  role?: string
+  timezone: string
+  role?: OrganizationRole
 }
 
 export interface AuthPayload {
@@ -23,19 +27,14 @@ export interface MePayload {
   current_organization: Organization | null
 }
 
-export interface ApiErrorBody {
-  message?: string
-  errors?: Record<string, string[]>
+export interface LoginInput {
+  email: string
+  password: string
 }
 
-export class ApiError extends Error {
-  status: number
-  body: ApiErrorBody | null
-
-  constructor(status: number, body: ApiErrorBody | null, message?: string) {
-    super(message || body?.message || `Request failed with status ${status}`)
-    this.name = 'ApiError'
-    this.status = status
-    this.body = body
-  }
+export interface RegisterInput {
+  name: string
+  email: string
+  password: string
+  password_confirmation: string
 }

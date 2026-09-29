@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { useAuthRepository } from '~/repositories/authRepository'
-import type { Organization, User } from '~/types/auth'
-import { ApiError } from '~/types/auth'
+import type { LoginInput, Organization, RegisterInput, User } from '~/types/auth'
+import { ApiError } from '~/utils/api-error'
 
 interface AuthState {
   user: User | null
@@ -42,12 +42,8 @@ export const useAuthStore = defineStore('auth', {
       const { me } = useAuthRepository()
 
       try {
-        const payload = await me()
-        this.setSession(
-          payload.user,
-          payload.current_organization,
-          payload.organizations,
-        )
+        const payload = await me(this.organization?.id ?? null)
+        this.setSession(payload.user, payload.current_organization, payload.organizations)
       }
       catch (error) {
         this.clearSession()
@@ -60,29 +56,24 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
-    async register(input: {
-      name: string
-      email: string
-      password: string
-      password_confirmation: string
-    }) {
-      const { register } = useAuthRepository()
-      const payload = await register(input)
-      this.setSession(
-        payload.user,
-        payload.organization,
-        payload.organization ? [payload.organization] : [],
-      )
+    /** The selected organization was rejected (membership removed): fall back to the API default. */
+    async recoverOrganization() {
+      this.organization = null
+      await this.bootstrap()
     },
 
-    async login(input: { email: string, password: string }) {
+    async register(input: RegisterInput) {
+      const { register } = useAuthRepository()
+      const payload = await register(input)
+      this.setSession(payload.user, payload.organization)
+      await this.bootstrap()
+    },
+
+    async login(input: LoginInput) {
       const { login } = useAuthRepository()
       const payload = await login(input)
-      this.setSession(
-        payload.user,
-        payload.organization,
-        payload.organization ? [payload.organization] : [],
-      )
+      this.setSession(payload.user, payload.organization)
+      await this.bootstrap()
     },
 
     async logout() {
