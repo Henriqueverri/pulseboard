@@ -4,7 +4,7 @@ namespace Tests\Feature;
 
 use Tests\TestCase;
 
-class ExampleTest extends TestCase
+class RootEndpointTest extends TestCase
 {
     public function test_root_describes_the_api_without_starting_a_session(): void
     {

@@ -9,7 +9,9 @@ use App\Models\Organization;
 use App\Models\Product;
 use App\Models\Transaction;
 use App\Models\TransactionItem;
+use App\Support\Money;
 use Carbon\CarbonImmutable;
+use Closure;
 use Database\Factories\ProductFactory;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
@@ -17,7 +19,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * Deterministic ~90-day sales history for the dashboard demo.
+ * Deterministic ~6-month sales history for the dashboard demo, in the organization's timezone.
  *
  * Shape of the data (so KPIs and charts have something to show):
  * - revenue grows ~50% across the period, weekends are weaker;
@@ -27,12 +29,18 @@ use Illuminate\Support\Str;
  * - some prices rose 45 days ago, so older items keep the old unit_price snapshot;
  * - most transactions are paid, recent ones may be pending, a few are refunded/canceled.
  *
+ * extend() later appends the days between the latest sale and today, so the default
+ * dashboard period keeps showing data long after the full seed.
+ *
  * It also runs in production (`pulseboard:demo`), where Faker and model factories
  * (require-dev) must not be needed: every value comes from the lists below and mt_rand().
+ * Days, hours and "today" are local to the organization; timestamps are stored in UTC.
  */
 class DemoDataSeeder extends Seeder
 {
-    public const HISTORY_DAYS = 90;
+    public const HISTORY_DAYS = 180;
+
+    public const CATALOG_SKU_PREFIX = 'PB-';
 
     private const RANDOM_SEED = 20260928;
 
@@ -52,18 +60,101 @@ class DemoDataSeeder extends Seeder
 
     private const PRICE_INCREASE = 1.08;
 
+    private const PENDING_DAYS = 3;
+
+    private const BASE_DAILY_ORDERS = 4;
+
+    private const FINAL_TREND = 1.5;
+
+    private const INSERT_CHUNK = 500;
+
+    /** @var list<array<string, mixed>> */
+    private array $transactionRows = [];
+
+    /** @var list<array<string, mixed>> */
+    private array $itemRows = [];
+
     public function run(Organization $organization): void
     {
         mt_srand(self::RANDOM_SEED);
 
-        $today = CarbonImmutable::today();
+        $today = self::today($organization);
 
         DB::transaction(function () use ($organization, $today): void {
             $products = $this->seedProducts($organization, $today);
             $customers = $this->seedCustomers($organization, $today);
 
             $this->seedTransactions($organization, $today, $products, $customers);
+            $this->flush();
         });
+    }
+
+    /**
+     * Appends sales for the days after the organization's latest transaction, up to today, and
+     * returns how many transactions were created. Days that already have sales are never touched.
+     *
+     * Each day is generated from its own seed (slug + date), so the same starting point always
+     * yields the same sales. Only the active, non-deleted demo catalog and non-deleted customers
+     * sell, weighted by their past popularity, at today's prices and with settled statuses.
+     * At most HISTORY_DAYS are appended; older gaps are left for `pulseboard:demo --refresh`.
+     */
+    public function extend(Organization $organization): int
+    {
+        $latest = Transaction::query()->forOrganization($organization)->max('occurred_at');
+
+        if ($latest === null) {
+            return 0;
+        }
+
+        $today = self::today($organization);
+        $lastDay = CarbonImmutable::parse($latest, 'UTC')->setTimezone($organization->timezone)->startOfDay();
+        $missingDays = min(self::HISTORY_DAYS, (int) round($lastDay->diffInDays($today)));
+
+        if ($missingDays <= 0) {
+            return 0;
+        }
+
+        $products = $this->popularProducts($organization);
+        $customers = $this->popularCustomers($organization);
+
+        if ($products->isEmpty() || $customers->isEmpty()) {
+            return 0;
+        }
+
+        $created = 0;
+
+        DB::transaction(function () use ($organization, $today, $missingDays, $products, $customers, &$created): void {
+            for ($daysAgo = $missingDays - 1; $daysAgo >= 0; $daysAgo--) {
+                $day = $today->subDays($daysAgo);
+
+                mt_srand(crc32($organization->slug.'|'.$day->toDateString()));
+
+                for ($n = 0; $n < $this->dailyOrders($day, self::FINAL_TREND); $n++) {
+                    $this->createTransaction(
+                        $organization,
+                        $this->occurredAt($day),
+                        $this->pickWeighted($customers)['model'],
+                        $this->pickStatus(self::PENDING_DAYS + 1),
+                        $products,
+                        fn (array $product) => $product['model']->price,
+                    );
+
+                    $created++;
+                }
+            }
+
+            $this->flush();
+        });
+
+        return $created;
+    }
+
+    /**
+     * Start of the current day in the organization's timezone.
+     */
+    public static function today(Organization $organization): CarbonImmutable
+    {
+        return CarbonImmutable::now($organization->timezone)->startOfDay();
     }
 
     /**
@@ -72,7 +163,7 @@ class DemoDataSeeder extends Seeder
     private function seedProducts(Organization $organization, CarbonImmutable $today): Collection
     {
         $products = collect();
-        $createdAt = $today->subDays(self::HISTORY_DAYS + 30);
+        $createdAt = $today->subDays(self::HISTORY_DAYS + 30)->utc();
 
         $popularityRanks = range(1, count(ProductFactory::CATALOG) * 2);
         shuffle($popularityRanks);
@@ -86,11 +177,11 @@ class DemoDataSeeder extends Seeder
                 $product->forceFill([
                     'organization_id' => $organization->id,
                     'name' => "{$name} {$variant}",
-                    'sku' => sprintf('PB-%03d-%s', $index + 1, strtoupper(substr($variant, 0, 3))),
+                    'sku' => sprintf('%s%03d-%s', self::CATALOG_SKU_PREFIX, $index + 1, strtoupper(substr($variant, 0, 3))),
                     'price' => $this->retailPrice($price),
                     'status' => $inactive ? ProductStatus::Inactive : ProductStatus::Active,
                     'created_at' => $createdAt,
-                    'updated_at' => $inactive ? $today->subDays(self::DEACTIVATED_DAYS_AGO) : $createdAt,
+                    'updated_at' => $inactive ? $today->subDays(self::DEACTIVATED_DAYS_AGO)->utc() : $createdAt,
                 ])->save();
 
                 $products->push([
@@ -119,7 +210,7 @@ class DemoDataSeeder extends Seeder
 
         foreach ($tiers as $tier) {
             for ($i = 0; $i < $tier['count']; $i++) {
-                $createdAt = $today->subDays(mt_rand(self::HISTORY_DAYS + 5, self::HISTORY_DAYS + 200));
+                $createdAt = $today->subDays(mt_rand(self::HISTORY_DAYS + 5, self::HISTORY_DAYS + 200))->utc();
                 $first = self::FIRST_NAMES[mt_rand(0, count(self::FIRST_NAMES) - 1)];
                 $last = self::LAST_NAMES[mt_rand(0, count(self::LAST_NAMES) - 1)];
 
@@ -151,84 +242,165 @@ class DemoDataSeeder extends Seeder
     ): void {
         for ($daysAgo = self::HISTORY_DAYS - 1; $daysAgo >= 0; $daysAgo--) {
             $day = $today->subDays($daysAgo);
+            $trend = 1 + (self::FINAL_TREND - 1) * (self::HISTORY_DAYS - 1 - $daysAgo) / (self::HISTORY_DAYS - 1);
 
-            for ($n = 0; $n < $this->transactionsForDay($day, $daysAgo); $n++) {
-                $occurredAt = $day->setTime($this->pickHour(), mt_rand(0, 59), mt_rand(0, 59));
+            $available = $products->filter(
+                fn (array $product) => $product['model']->status === ProductStatus::Active
+                    || $daysAgo > self::DEACTIVATED_DAYS_AGO
+            );
 
-                if ($occurredAt->isFuture()) {
-                    $occurredAt = $today->setTime(0, mt_rand(0, 59));
-                }
+            $unitPrice = fn (array $product) => $product['raised'] && $daysAgo > self::PRICE_CHANGE_DAYS_AGO
+                ? $this->retailPrice((float) $product['model']->price / self::PRICE_INCREASE)
+                : $product['model']->price;
 
-                $customer = $this->pickWeighted($customers)['model'];
-
-                $transaction = new Transaction;
-                $transaction->forceFill([
-                    'organization_id' => $organization->id,
-                    'customer_id' => $customer->id,
-                    'status' => $this->pickStatus($daysAgo),
-                    'occurred_at' => $occurredAt,
-                    'created_at' => $occurredAt,
-                    'updated_at' => $occurredAt,
-                ])->save();
-
-                $this->seedItems($transaction, $products, $daysAgo);
+            for ($n = 0; $n < $this->dailyOrders($day, $trend * $this->eventFactor($daysAgo)); $n++) {
+                $this->createTransaction(
+                    $organization,
+                    $this->occurredAt($day),
+                    $this->pickWeighted($customers)['model'],
+                    $this->pickStatus($daysAgo),
+                    $available,
+                    $unitPrice,
+                );
             }
         }
     }
 
     /**
-     * @param  Collection<int, array{model: Product, weight: float, raised: bool}>  $products
+     * Buffers a transaction and its items; flush() writes them in bulk. Products and customers
+     * always come from $organization, and totals use the same Money arithmetic as the models.
+     *
+     * @param  Collection<int, array{model: Product, weight: float}>  $products
+     * @param  Closure(array{model: Product, weight: float}): string  $unitPrice
      */
-    private function seedItems(Transaction $transaction, Collection $products, int $daysAgo): void
-    {
-        $available = $products->filter(
-            fn (array $product) => $product['model']->status === ProductStatus::Active
-                || $daysAgo > self::DEACTIVATED_DAYS_AGO
-        );
+    private function createTransaction(
+        Organization $organization,
+        CarbonImmutable $occurredAt,
+        Customer $customer,
+        TransactionStatus $status,
+        Collection $products,
+        Closure $unitPrice,
+    ): void {
+        $transactionId = (new Transaction)->newUniqueId();
+        $timestamp = $occurredAt->utc()->format('Y-m-d H:i:s');
 
-        $lines = $this->pickFrom([1 => 55, 2 => 30, 3 => 15]);
+        $lines = min($products->count(), $this->pickFrom([1 => 55, 2 => 30, 3 => 15]));
         $chosen = [];
 
         while (count($chosen) < $lines) {
-            $candidate = $this->pickWeighted($available);
+            $candidate = $this->pickWeighted($products);
             $chosen[$candidate['model']->id] = $candidate;
         }
 
+        $totalCents = 0;
+
         foreach ($chosen as $product) {
-            $unitPrice = $product['model']->price;
+            $quantity = $this->pickFrom([1 => 65, 2 => 25, 3 => 10]);
+            $price = $unitPrice($product);
+            $lineTotal = Money::multiply($price, $quantity);
+            $totalCents += Money::toCents($lineTotal);
 
-            if ($product['raised'] && $daysAgo > self::PRICE_CHANGE_DAYS_AGO) {
-                $unitPrice = $this->retailPrice((float) $unitPrice / self::PRICE_INCREASE);
-            }
-
-            TransactionItem::query()->forceCreate([
-                'transaction_id' => $transaction->id,
+            $this->itemRows[] = [
+                'id' => (new TransactionItem)->newUniqueId(),
+                'transaction_id' => $transactionId,
                 'product_id' => $product['model']->id,
-                'quantity' => $this->pickFrom([1 => 65, 2 => 25, 3 => 10]),
-                'unit_price' => $unitPrice,
-                'created_at' => $transaction->occurred_at,
-                'updated_at' => $transaction->occurred_at,
-            ]);
+                'quantity' => $quantity,
+                'unit_price' => $price,
+                'line_total' => $lineTotal,
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
+            ];
         }
+
+        $this->transactionRows[] = [
+            'id' => $transactionId,
+            'organization_id' => $organization->id,
+            'customer_id' => $customer->id,
+            'status' => $status->value,
+            'total_amount' => Money::fromCents($totalCents),
+            'occurred_at' => $timestamp,
+            'created_at' => $timestamp,
+            'updated_at' => $timestamp,
+        ];
     }
 
-    private function transactionsForDay(CarbonImmutable $day, int $daysAgo): int
+    private function flush(): void
     {
-        $trend = 1 + 0.5 * (self::HISTORY_DAYS - 1 - $daysAgo) / (self::HISTORY_DAYS - 1);
+        foreach (array_chunk($this->transactionRows, self::INSERT_CHUNK) as $rows) {
+            Transaction::query()->insert($rows);
+        }
 
+        foreach (array_chunk($this->itemRows, self::INSERT_CHUNK) as $rows) {
+            TransactionItem::query()->insert($rows);
+        }
+
+        $this->transactionRows = [];
+        $this->itemRows = [];
+    }
+
+    /**
+     * @return Collection<int, array{model: Product, weight: float}>
+     */
+    private function popularProducts(Organization $organization): Collection
+    {
+        return Product::query()
+            ->forOrganization($organization)
+            ->where('status', ProductStatus::Active)
+            ->where('sku', 'like', self::CATALOG_SKU_PREFIX.'%')
+            ->withSum('transactionItems as units_sold', 'quantity')
+            ->orderBy('sku')
+            ->get()
+            ->map(fn (Product $product) => ['model' => $product, 'weight' => 1.0 + (float) $product->units_sold])
+            ->values();
+    }
+
+    /**
+     * @return Collection<int, array{model: Customer, weight: float}>
+     */
+    private function popularCustomers(Organization $organization): Collection
+    {
+        return Customer::query()
+            ->forOrganization($organization)
+            ->withCount('transactions')
+            ->orderBy('email')
+            ->get()
+            ->map(fn (Customer $customer) => ['model' => $customer, 'weight' => 1.0 + $customer->transactions_count])
+            ->values();
+    }
+
+    /**
+     * A local time during business hours of $day, stored in UTC. Today's sales never lie in the future.
+     */
+    private function occurredAt(CarbonImmutable $day): CarbonImmutable
+    {
+        $occurredAt = $day->setTime($this->pickHour(), mt_rand(0, 59), mt_rand(0, 59));
+        $now = CarbonImmutable::now($day->getTimezone());
+
+        if ($occurredAt->greaterThan($now)) {
+            $occurredAt = $day->addSeconds(mt_rand(0, max(0, (int) $day->diffInSeconds($now))));
+        }
+
+        return $occurredAt->utc();
+    }
+
+    private function dailyOrders(CarbonImmutable $day, float $level): int
+    {
         $weekday = match (true) {
             $day->isSunday() => 0.6,
             $day->isSaturday() => 0.8,
             default => 1.0,
         };
 
-        $event = match (true) {
+        return max(0, (int) round(self::BASE_DAILY_ORDERS * $level * $weekday + mt_rand(-10, 10) / 10));
+    }
+
+    private function eventFactor(int $daysAgo): float
+    {
+        return match (true) {
             $daysAgo >= 32 && $daysAgo <= 38 => 2.2,
             $daysAgo >= 56 && $daysAgo <= 60 => 0.5,
             default => 1.0,
         };
-
-        return max(0, (int) round(4 * $trend * $weekday * $event + mt_rand(-10, 10) / 10));
     }
 
     private function retailPrice(float $amount): string
@@ -238,7 +410,7 @@ class DemoDataSeeder extends Seeder
 
     private function pickStatus(int $daysAgo): TransactionStatus
     {
-        $weights = $daysAgo <= 3
+        $weights = $daysAgo <= self::PENDING_DAYS
             ? ['paid' => 70, 'pending' => 25, 'canceled' => 5]
             : ['paid' => 88, 'pending' => 1, 'refunded' => 6, 'canceled' => 5];
 

@@ -36,7 +36,8 @@ class AnalyticsCrossEndpointConsistencyTest extends TestCase
     }
 
     /**
-     * The demo history is 90 days long, so the period before the last 90 days is empty.
+     * The demo history is DemoDataSeeder::HISTORY_DAYS (180) long: up to 90 days the previous
+     * period has sales too; the period before the last 180 days is empty.
      *
      * @return array<string, array{0: int}>
      */
@@ -46,6 +47,7 @@ class AnalyticsCrossEndpointConsistencyTest extends TestCase
             'last 7 days' => [7],
             'last 30 days' => [30],
             'last 90 days' => [90],
+            'last 180 days' => [180],
         ];
     }
 

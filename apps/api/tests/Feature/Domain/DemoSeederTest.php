@@ -10,6 +10,8 @@ use App\Models\Product;
 use App\Models\Transaction;
 use App\Models\TransactionItem;
 use App\Models\User;
+use App\Support\Analytics\ReportingPeriod;
+use Carbon\CarbonImmutable;
 use Database\Seeders\DemoDataSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -42,13 +44,43 @@ class DemoSeederTest extends TestCase
         $this->assertSame(70, Customer::query()->count());
 
         $transactions = Transaction::query()->count();
-        $this->assertGreaterThanOrEqual(300, $transactions);
-        $this->assertLessThanOrEqual(800, $transactions);
+        $this->assertGreaterThanOrEqual(600, $transactions);
+        $this->assertLessThanOrEqual(1600, $transactions);
         $this->assertGreaterThan($transactions, TransactionItem::query()->count());
 
-        $oldest = Transaction::query()->min('occurred_at');
-        $this->assertGreaterThanOrEqual(now()->subDays(DemoDataSeeder::HISTORY_DAYS)->startOfDay(), $oldest);
-        $this->assertLessThanOrEqual(now(), Transaction::query()->max('occurred_at'));
+        $history = ReportingPeriod::lastDays(DemoDataSeeder::HISTORY_DAYS, Organization::query()->sole()->timezone);
+        $this->assertGreaterThanOrEqual($history->startUtc(), CarbonImmutable::parse(Transaction::query()->min('occurred_at'), 'UTC'));
+        $this->assertLessThanOrEqual(now(), CarbonImmutable::parse(Transaction::query()->max('occurred_at'), 'UTC'));
+    }
+
+    public function test_sales_happen_during_business_hours_in_the_organization_timezone(): void
+    {
+        $timezone = Organization::query()->sole()->timezone;
+        $today = DemoDataSeeder::today(Organization::query()->sole());
+
+        $hours = Transaction::query()->pluck('occurred_at')
+            ->map(fn ($occurredAt) => CarbonImmutable::parse($occurredAt, 'UTC')->setTimezone($timezone))
+            ->reject(fn (CarbonImmutable $local) => $local->isSameDay($today))
+            ->map(fn (CarbonImmutable $local) => $local->hour);
+
+        $this->assertGreaterThanOrEqual(8, $hours->min());
+        $this->assertLessThanOrEqual(22, $hours->max());
+    }
+
+    public function test_every_week_of_the_history_has_paid_sales(): void
+    {
+        $organization = Organization::query()->sole();
+        $today = DemoDataSeeder::today($organization);
+
+        for ($weeksAgo = 0; $weeksAgo < intdiv(DemoDataSeeder::HISTORY_DAYS, 7); $weeksAgo++) {
+            $week = ReportingPeriod::fromDates(
+                $today->subDays($weeksAgo * 7 + 6)->toDateString(),
+                $today->subDays($weeksAgo * 7)->toDateString(),
+                $organization->timezone,
+            );
+
+            $this->assertGreaterThan(0, Transaction::query()->paid()->occurredWithin($week)->count(), "week ending {$week->to()}");
+        }
     }
 
     public function test_status_mix_is_mostly_paid_with_every_status_present(): void

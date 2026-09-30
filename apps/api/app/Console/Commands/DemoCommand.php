@@ -14,9 +14,10 @@ use Illuminate\Support\Facades\DB;
 /**
  * Creates (or refreshes) the public demo organization without touching any other data.
  *
- * Safe to run on every deploy: without --refresh an existing demo is left as is (only the
- * demo passwords are synced with DEMO_PASSWORD). --refresh rebuilds the demo organization's
- * catalog and history so the 90-day history ends today again.
+ * Safe to run on every container start: without --refresh an existing demo keeps its data,
+ * the demo passwords are synced with DEMO_PASSWORD and the sales history is extended up to
+ * today (only days after the latest sale are added). --refresh rebuilds the demo
+ * organization's catalog and ~6-month history so it ends today again.
  */
 class DemoCommand extends Command
 {
@@ -54,9 +55,15 @@ class DemoCommand extends Command
         }
 
         if ($organization !== null && ! $this->option('refresh')) {
-            DB::transaction(fn () => $this->syncAccounts($organization, $accounts, $password));
+            $added = DB::transaction(function () use ($organization, $accounts, $password): int {
+                $this->syncAccounts($organization, $accounts, $password);
 
-            $this->info('Demo organization already exists; passwords synced. Use --refresh to rebuild its data.');
+                return (new DemoDataSeeder)->extend($organization);
+            });
+
+            $this->info($added > 0
+                ? "Demo organization already exists; passwords synced and {$added} transactions added up to today."
+                : 'Demo organization already exists; passwords synced and history already up to date. Use --refresh to rebuild its data.');
 
             return self::SUCCESS;
         }

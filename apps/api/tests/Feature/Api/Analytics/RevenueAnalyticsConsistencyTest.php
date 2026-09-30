@@ -8,6 +8,7 @@ use App\Support\Analytics\Granularity;
 use App\Support\Analytics\ReportingPeriod;
 use App\Support\Money;
 use Carbon\CarbonImmutable;
+use Database\Seeders\DemoDataSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
 use Illuminate\Testing\TestResponse;
@@ -34,7 +35,7 @@ class RevenueAnalyticsConsistencyTest extends TestCase
 
         $this->organization = Organization::query()->sole();
         $this->owner = User::query()->where('email', 'test@example.com')->sole();
-        $this->history = ReportingPeriod::lastDays(90, $this->organization->timezone);
+        $this->history = ReportingPeriod::lastDays(DemoDataSeeder::HISTORY_DAYS, $this->organization->timezone);
     }
 
     public function test_series_totals_match_the_summary_and_the_dashboard_for_every_granularity(): void

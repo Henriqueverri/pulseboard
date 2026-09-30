@@ -1,734 +1,206 @@
 # PulseBoard
 
-SaaS de analytics para pequenos negócios acompanharem vendas, receita, clientes e indicadores em um dashboard.
+**SaaS multi-tenant de gestão comercial e métricas.** Produtos, clientes e vendas de uma organização num só lugar, com dashboard e analytics calculados no backend, no fuso horário da organização.
 
-Este repositório é um monorepo de portfólio full stack: API Laravel com autenticação Sanctum SPA (cookie), multi-tenancy por Organization, CRUD de produtos e clientes, transações somente leitura e analytics (dashboard, receita, produtos, clientes e status); SPA Nuxt que consome essa API (detalhes do front em [`apps/web/README.md`](apps/web/README.md)).
+Projeto de portfólio full stack, construído de ponta a ponta — produto, API, frontend, testes, CI e deploy — para demonstrar como eu projeto e entrego uma aplicação SaaS completa.
+
+[![CI](https://github.com/Henriqueverri/pulseboard/actions/workflows/ci.yml/badge.svg)](https://github.com/Henriqueverri/pulseboard/actions/workflows/ci.yml)
+[![Demo](https://img.shields.io/badge/demo-app.henriqueverri.dev-4f46e5)](https://app.henriqueverri.dev)
+
+![Dashboard do PulseBoard com KPIs comparados ao período anterior, receita diária, distribuição por status e rankings](docs/screenshots/dashboard.png)
+
+## Demo
+
+**[app.henriqueverri.dev](https://app.henriqueverri.dev)**
+
+| Conta | E-mail | Senha |
+|-------|--------|-------|
+| Owner (acesso completo, inclusive exclusão) | `demo@example.com` | `PulseBoardDemo2026!` |
+| Member (sem permissão de exclusão) | `demo-member@example.com` | `PulseBoardDemo2026!` |
+
+- A API roda no plano gratuito do Render: **o primeiro acesso depois de um período ocioso pode levar até ~1 minuto** enquanto o container sobe.
+- A organização de demo tem 40 produtos, 70 clientes e ~6 meses de vendas, completadas até o dia atual sempre que a API sobe. Fique à vontade para criar, editar e excluir — a demo pode ser restaurada ao estado original.
+
+| Analytics de clientes | Transações | Mobile |
+|---|---|---|
+| ![Analytics de clientes: base, ativos, novos e recorrentes com ranking](docs/screenshots/analytics-customers.png) | ![Lista de transações com filtros por status, cliente e período](docs/screenshots/transactions.png) | ![Dashboard em tela de celular](docs/screenshots/dashboard-mobile.png) |
+
+## O problema
+
+Pequenos negócios costumam acompanhar vendas em planilhas ou nos relatórios fragmentados de cada ferramenta. Perguntas simples — *quanto vendi este mês comparado ao anterior? quais produtos puxam a receita? quantos clientes voltaram a comprar?* — exigem trabalho manual e dão respostas diferentes dependendo de quem calcula.
+
+O PulseBoard centraliza catálogo, clientes e transações por organização e responde essas perguntas com **definições únicas de métrica** (receita, pedidos, ticket médio, clientes ativos, novos e recorrentes), sempre comparadas ao período anterior e no calendário local do negócio.
+
+**Para quem:** donos e gestores de pequenos comércios e lojas online que precisam de visibilidade comercial sem montar uma stack de BI.
+
+## Funcionalidades
+
+- **Dashboard** — receita, pedidos, ticket médio e clientes ativos com variação vs. período anterior; receita no tempo; distribuição por status; top 5 produtos e clientes.
+- **Analytics** — receita por dia, semana ou mês; ranking de produtos (receita ou unidades); clientes novos vs. recorrentes e ranking; distribuição de transações por status.
+- **Períodos** — presets (7 dias, 30 dias, 90 dias, 12 meses, mês atual, mês anterior) ou intervalo personalizado. Período, filtros, ordenação e paginação ficam na URL: links compartilháveis e voltar/avançar funcionam.
+- **Produtos e clientes** — CRUD com busca e detalhe com métricas de venda; a exclusão preserva o histórico (soft delete quando há vendas).
+- **Transações** — listagem somente leitura com filtros (status, cliente, período, busca) e detalhe com itens e preço no momento da venda.
+- **Organizações e papéis** — o cadastro cria a organização; `owner` e `member` têm permissões diferentes, aplicadas pela API.
+- **Acessibilidade e responsividade** — axe-core sem violações nas telas principais, navegação por teclado, layout de 360 px a desktop.
 
 ## Stack
 
-| Camada | Tecnologia |
-|--------|------------|
-| Frontend | Nuxt 4, Vue 3, TypeScript, Tailwind CSS, Pinia |
-| Backend | Laravel 12, PHP 8.4+, API REST, Sanctum SPA |
+| Camada | Tecnologias |
+|--------|-------------|
+| Frontend | Nuxt 4 (SPA), Vue 3, TypeScript, Pinia, Tailwind CSS, reka-ui, Chart.js |
+| Backend | Laravel 12, PHP 8.4, Laravel Sanctum (SPA auth) |
 | Banco | PostgreSQL 16 |
-| Package FE | bun |
-| Infra local | Docker Compose (somente Postgres no MVP) |
+| Testes | PHPUnit, Vitest + @nuxt/test-utils, Playwright |
+| Infra | GitHub Actions, Cloudflare Pages, Render (Docker: Nginx + PHP-FPM), Supabase PostgreSQL |
 
-## Estrutura do monorepo
+## Arquitetura
 
-```text
-pulseboard/
-├── apps/
-│   ├── web/          # Nuxt 4
-│   └── api/          # Laravel 12 (+ Dockerfile de produção)
-├── .github/workflows/ci.yml
-├── docker-compose.yml  # Postgres local
-├── render.yaml         # Blueprint do Render (API)
-├── README.md
-└── .gitignore
+```mermaid
+flowchart LR
+  B[Navegador] --> W["Nuxt 4 SPA (estático)<br/>Cloudflare Pages<br/>app.henriqueverri.dev"]
+  W -- "REST + cookie de sessão<br/>(Sanctum SPA, CSRF)" --> A["API Laravel 12<br/>Render · Docker<br/>api.henriqueverri.dev"]
+  A --> D[("PostgreSQL<br/>Supabase")]
+  G[GitHub] -- push --> CI[GitHub Actions CI]
+  G -- integração nativa --> W
+  CI -- "checks verdes → deploy" --> A
 ```
 
-## Pré-requisitos
+Monorepo com dois apps independentes: `apps/web` (SPA gerada estaticamente) e `apps/api` (API REST). Frontend e backend têm deploys separados; todo cálculo de métrica acontece na API.
 
-- PHP 8.4+ com extensão `pdo_pgsql` (o `composer.lock` usa componentes Symfony 8)
-- Composer 2
-- bun
-- Docker + Docker Compose
-- Node.js 20+ (opcional; o front usa bun)
+- **Backend:** controllers finos → Form Requests → services de analytics (um por endpoint, agregações em SQL) → API Resources. Tenant resolvido por middleware; autorização por Policies.
+- **Frontend:** página → composable → repository → `useApiClient`. Nenhum componente faz HTTP direto; Pinia guarda apenas a sessão (usuário e organização).
 
-## Como iniciar localmente
+## Decisões técnicas
 
-### 1. PostgreSQL
+| Decisão | Por quê |
+|---------|---------|
+| **Sanctum SPA com cookie httpOnly** em vez de token no `localStorage` | Credencial fora do alcance de JavaScript (mitiga roubo por XSS), CSRF nativo e sem BFF extra. Exige front e API no mesmo site — por isso `app.` e `api.` sob o mesmo domínio. |
+| **Nuxt como SPA estática** (`ssr: false`) | A sessão vive num cookie da API; SSR não agregaria valor e exigiria servidor Node. O build estático vai para uma CDN. |
+| **Multi-tenancy por `organization_id`** em banco compartilhado | Simples de operar, com isolamento garantido em camadas (middleware, escopo de consulta, policies) e coberto por testes. |
+| **Analytics agregadas no backend** | Uma definição de métrica para todas as telas; o front não recalcula nada. Dinheiro trafega como string decimal, nunca float. |
+| **Timezone da organização** como calendário de negócio | "Hoje" e "este mês" dependem de onde o negócio está. O banco guarda UTC; os limites do período são convertidos na aplicação. |
+| **Transações somente leitura** | Representam histórico de vendas; o escopo é gestão e análise, não checkout. Ver [roadmap](#roadmap). |
+| **Sem Redis, filas ou workers** | Nada é assíncrono hoje; sessão e cache no banco mantêm a infra mínima. |
 
-Na raiz do repositório:
+Detalhes e alternativas consideradas em [`docs/architecture.md`](docs/architecture.md).
+
+## Segurança e autenticação
+
+- Sessão em cookie `httpOnly`, `Secure`, `SameSite=Lax`; CSRF via `XSRF-TOKEN` / `X-XSRF-TOKEN`. Nenhum token em `localStorage` ou `sessionStorage`.
+- CORS restrito à origem exata do front, com credentials; rate limit em login e cadastro.
+- Erros de API sempre em JSON, sem expor classes internas; o `?redirect=` pós-login aceita apenas caminhos internos.
+- Front com `X-Frame-Options: DENY` e `frame-ancestors 'none'`; API ciente do proxy (`TRUSTED_PROXIES`) para HTTPS e rate limit pelo IP real.
+
+## Multi-tenancy
+
+Cada produto, cliente e transação pertence a uma organização. O header `X-Organization-Id` apenas **seleciona o contexto** — nunca autoriza sozinho. Toda requisição passa por:
+
+1. sessão autenticada → senão **401**;
+2. membership do usuário na organização → senão **403**;
+3. recurso pertencente à organização → senão **404** (não revela a existência);
+4. policy do papel (`owner` / `member`) — por exemplo, só `owner` exclui.
+
+`organization_id` enviado no payload ou na query é rejeitado (**422**). Testes dedicados verificam que dados de uma organização nunca aparecem nem alteram os números de outra.
+
+## Analytics e timezone
+
+- **Definição única de venda:** receita, pedidos, ticket médio e clientes consideram só transações `paid`; a distribuição por status é a exceção documentada.
+- **Comparação automática** com o período anterior de mesma duração (`value`, `previous`, `change`).
+- **Número fixo de consultas por endpoint** (de 1 a 4), independente de volume, período ou granularidade — travado por teste, sem N+1.
+- **Consistência entre endpoints testada:** a receita do dashboard é igual à soma da série temporal, ao total do ranking completo de produtos e à linha `paid` da distribuição por status.
+- **Performance medida** com `EXPLAIN ANALYZE` sobre 200 mil transações: ~2–45 ms por consulta em 30 dias, até ~300 ms em 366 dias. Um índice composto candidato foi avaliado e descartado por não trazer ganho material.
+- **Timezone:** limites de período calculados no fuso IANA da organização e convertidos para UTC; buckets de dia, semana e mês agrupados no fuso local pelo PostgreSQL, com horário de verão correto (testado na CI).
+
+Contratos completos em [`docs/api.md`](docs/api.md).
+
+## Testes
+
+| Suíte | Ferramenta | Cobertura |
+|-------|-----------|-----------|
+| API | PHPUnit (360+ testes) | Auth, isolamento entre organizações, CRUD, regras de exclusão, analytics com dados controlados e sobre o dataset de demo, orçamento de consultas, timezone e horário de verão |
+| Web | Vitest + @nuxt/test-utils (160+ testes) | Utilitários, api client, store de sessão, composables e páginas com fixtures no formato real da API |
+| E2E | Playwright | Login → dashboard → CRUD de produto → transação → analytics, contra o build de produção e um PostgreSQL descartável |
+
+Como rodar cada suíte: [`docs/testing.md`](docs/testing.md).
+
+## CI/CD e deploy
+
+**CI** ([GitHub Actions](.github/workflows/ci.yml), em push na `main` e em pull requests):
+
+- `api` — Pint, migrations em PostgreSQL 16 limpo e a suíte completa em PostgreSQL;
+- `web` — lint, typecheck, Vitest e build estático;
+- `e2e` — sobe PostgreSQL, API com dados de demo (senha aleatória por execução) e o build estático, e roda o Playwright.
+
+**Deploy** pelas integrações nativas das plataformas, sem pipeline de deploy próprio:
+
+- **Frontend** → Cloudflare Pages, build estático a cada push na `main`.
+- **API** → Render (Docker), publicada só depois que os checks da CI passam e só quando `apps/api/**` muda. No start, o container roda as migrations e a sincronização da demo sob advisory lock do PostgreSQL; se algo falhar, a versão anterior continua no ar.
+- **Banco** → Supabase PostgreSQL (Session pooler, TLS).
+
+Configuração completa em [`docs/deployment.md`](docs/deployment.md).
+
+## Rodando localmente
+
+Pré-requisitos: PHP 8.4 com `pdo_pgsql`, Composer 2, bun e Docker.
 
 ```bash
+# 1. PostgreSQL
 docker compose up -d
-```
 
-Credenciais padrão (apenas local):
-
-- Host: `127.0.0.1`
-- Port: `5432`
-- Database / user / password: `pulseboard`
-
-### 2. API (Laravel)
-
-```bash
+# 2. API — http://localhost:8000
 cd apps/api
-cp .env.example .env   # se ainda não existir
+cp .env.example .env
+composer install
 php artisan key:generate
 php artisan migrate:fresh --seed
-php artisan serve --host=127.0.0.1 --port=8000
-```
+php artisan serve --port=8000
 
-`migrate:fresh --seed` recria o banco local do zero com o dataset de demonstração (1 organização, 40 produtos, 70 clientes, ~440 transações em 90 dias). Usuários: `test@example.com` (owner) e `member@example.com` (member), senha `password`.
-
-- API: http://localhost:8000  
-- Health: http://localhost:8000/api/v1/health  
-- CSRF: http://localhost:8000/sanctum/csrf-cookie  
-
-### 3. Frontend (Nuxt)
-
-```bash
+# 3. Frontend — http://localhost:3000 (em outro terminal)
 cd apps/web
-cp .env.example .env   # se ainda não existir
+cp .env.example .env
 bun install
 bun run dev
 ```
 
-- Frontend: http://localhost:3000  
-- Login: http://localhost:3000/login  
-- Register: http://localhost:3000/register  
+Login local: `test@example.com` (owner) ou `member@example.com` (member), senha `password`. O front precisa rodar em `localhost:3000`, a origem liberada no CORS e no Sanctum.
 
-O front precisa rodar em `localhost:3000`: é a única origem liberada em CORS e em `SANCTUM_STATEFUL_DOMAINS` no `.env` local.
-
-## Testes e qualidade
-
-### API
-
-```bash
-cd apps/api
-php artisan test          # SQLite em memória (padrão do phpunit.xml)
-vendor/bin/pint --test    # estilo (vendor/bin/pint corrige)
-```
-
-No SQLite, 2 testes de horário de verão (buckets exatos por timezone) são pulados: eles exigem PostgreSQL, que é o banco de produção. Para rodar a suíte inteira em PostgreSQL (como a CI), use um banco separado — `RefreshDatabase` apaga o banco usado:
-
-```bash
-docker exec pulseboard-postgres createdb -U pulseboard pulseboard_test
-DB_CONNECTION=pgsql DB_DATABASE=pulseboard_test php artisan test
-```
-
-### Web
-
-```bash
-cd apps/web
-bun run test        # Vitest
-bun run typecheck
-bun run lint        # bun run lint:fix corrige
-bun run generate    # build estático em .output/public
-```
-
-### E2E (Playwright)
-
-O smoke faz login com a conta owner da demo (`pulseboard:demo`), abre o dashboard, cria/edita/remove um produto, abre uma transação e navega pelas abas de analytics. Ele escreve no banco, então use um banco descartável, nunca o de desenvolvimento nem o de produção. A senha vem de `DEMO_PASSWORD`, que o `pulseboard:demo` e o Playwright leem do ambiente; use uma senha descartável (a CI gera uma por execução). `E2E_EMAIL` / `E2E_PASSWORD` sobrescrevem a conta, se precisar. Com o front de produção servido em `localhost:3000` (pare o `bun run dev` antes):
-
-```bash
-docker exec pulseboard-postgres createdb -U pulseboard pulseboard_e2e
-export DEMO_PASSWORD="$(openssl rand -hex 24)"   # nos três terminais (ou rode tudo no mesmo shell)
-
-# terminal 1 — API no banco descartável
-cd apps/api
-DB_DATABASE=pulseboard_e2e php artisan migrate:fresh --force
-DB_DATABASE=pulseboard_e2e php artisan pulseboard:demo
-DB_DATABASE=pulseboard_e2e php artisan serve --port=8001
-
-# terminal 2 — build de produção apontando para essa API
-cd apps/web
-NUXT_PUBLIC_API_URL=http://localhost:8001/api/v1 NUXT_PUBLIC_API_ORIGIN=http://localhost:8001 bun run generate
-bun run serve:static
-
-# terminal 3
-cd apps/web
-bun run test:e2e
-```
-
-`serve:static` serve o build como o Cloudflare Pages em modo SPA (qualquer rota desconhecida recebe o `index.html`). O Playwright usa o Google Chrome instalado (`E2E_CHANNEL` troca o canal).
-
-## CI
-
-`.github/workflows/ci.yml` roda em push na `main` e em pull requests:
-
-| Job | O que valida |
-|-----|--------------|
-| `api` | `composer install`, Pint, `migrate` em PostgreSQL 16 limpo, PHPUnit completo em PostgreSQL (sem os skips do SQLite) |
-| `web` | `bun install --frozen-lockfile`, lint, typecheck, Vitest, `nuxt generate` |
-| `e2e` | PostgreSQL descartável com `migrate:fresh` + `pulseboard:demo` (`DEMO_PASSWORD` aleatória por execução, mascarada nos logs) → API (`artisan serve`) → build estático (`serve:static`) → Playwright; logs e traces como artefato em caso de falha |
-
-Deploy não roda na CI: Render (API) e a hospedagem do front fazem deploy pela integração nativa com o GitHub; o Render espera os checks da CI passarem (`autoDeployTrigger: checksPass`).
-
-## Autenticação (Sanctum SPA)
-
-Fluxo cookie httpOnly + CSRF (sem token no `localStorage`):
-
-1. `GET /sanctum/csrf-cookie` (`credentials: include`)
-2. `POST /api/v1/auth/register` ou `/login`
-3. Requests seguintes com cookie de sessão
-4. Contexto de tenant via header `X-Organization-Id` (contexto apenas; autorização = membership)
-
-## API de negócio (`/api/v1`)
-
-Rotas de domínio exigem sessão autenticada + `X-Organization-Id` de uma organização da qual o usuário é membro.
-
-| Recurso | Rotas | Listagem |
-|---------|-------|----------|
-| Products | `GET/POST /products`, `GET/PUT/PATCH/DELETE /products/{id}` | `status`, `q` (nome ou SKU), `page`, `per_page` (1–100, padrão 15) |
-| Customers | `GET/POST /customers`, `GET/PUT/PATCH/DELETE /customers/{id}` | `q` (nome ou e-mail), `page`, `per_page` (1–100, padrão 15) |
-
-- Listagens paginadas (formato padrão do Laravel: `data`, `links`, `meta`), ordenadas por `name` e depois `id`.
-- `GET /products/{id}` inclui `units_sold` e `revenue`; `GET /customers/{id}` inclui `orders_count`, `total_spent` e as 5 `recent_transactions` mais recentes. As métricas consideram apenas transações `paid`.
-- `organization_id` nunca é aceito no payload (422); o tenant vem sempre do contexto.
-- Registro de outra organização → 404. Header de organização sem membership → 403.
-- `DELETE` é restrito a `owner`. Sem histórico (nenhuma venda/transação) o registro é removido; com histórico é feito soft delete e as transações permanecem intactas.
-- SKU e e-mail são únicos por organização **incluindo registros soft-deleted** (o índice único não é parcial). E-mails são normalizados para minúsculas.
-
-### Transactions (read-only)
-
-No MVP, Transactions são registros históricos (gerados pelo seed) e **não podem ser criadas, alteradas ou removidas pela API** — só existem `GET /transactions` e `GET /transactions/{id}`; outros métodos retornam 405.
-
-| Filtro | Formato | Regra |
-|--------|---------|-------|
-| `status` | `paid`, `refunded`, `pending`, `canceled` | Sem filtro, todos os status são retornados |
-| `q` | texto | UUID → match exato no id da transaction; outro texto → nome ou e-mail do customer (case-insensitive) |
-| `customer_id` | UUID | Customer de outra organização resulta em lista vazia |
-| `from` / `to` | `YYYY-MM-DD` | Dias do calendário na timezone da Organization (`organizations.timezone`, padrão `America/Sao_Paulo`): `from` = início do dia, `to` = fim do dia; `from` > `to` → 422 |
-| `page` / `per_page` | inteiro | `per_page` 1–100, padrão 15 |
-
-Ordenação: `occurred_at` desc, depois `id` desc. A listagem traz `customer` e `items_count`; o detalhe traz `customer` e `items` com `product`. Customers/products soft-deleted continuam aparecendo no histórico com `is_deleted: true`. `unit_price` é o preço no momento da venda. `total_amount`, `unit_price` e `line_total` são strings com 2 casas.
-
-- **Compatível com analytics:** `from` / `to` usam o mesmo calendário local dos endpoints de analytics. Com os mesmos `from` / `to`, `meta.total` com `status=paid` é igual a `orders` do `/dashboard`, e sem filtro de status é igual à soma de `orders` de `/analytics/transactions`.
-- **Tenant e permissões:** transação de outra organização → 404; header sem membership → 403; owner e member podem ler.
-- **Consultas:** número fixo por request (listagem: contagem, página com `items_count` e customers; detalhe: transação, customer, itens e produtos), independente do número de resultados ou de itens.
-
-```http
-GET /api/v1/transactions?status=paid&from=2026-09-01&to=2026-09-30&q=maria&per_page=20
-X-Organization-Id: {organization-uuid}
-Accept: application/json
-```
-
-```json
-{
-  "data": [
-    {
-      "id": "9d1c…",
-      "status": "paid",
-      "total_amount": "159.50",
-      "occurred_at": "2026-09-15T14:32:00.000000Z",
-      "items_count": 2,
-      "customer": { "id": "9d1b…", "name": "Maria Souza", "email": "maria@example.com", "is_deleted": false }
-    }
-  ],
-  "links": { "first": "…?page=1", "last": "…?page=1", "prev": null, "next": null },
-  "meta": { "current_page": 1, "per_page": 20, "total": 1, "last_page": 1 }
-}
-```
-
-`GET /api/v1/transactions/{id}`:
-
-```json
-{
-  "data": {
-    "id": "9d1c…",
-    "status": "paid",
-    "total_amount": "159.50",
-    "occurred_at": "2026-09-15T14:32:00.000000Z",
-    "customer": { "id": "9d1b…", "name": "Maria Souza", "email": "maria@example.com", "is_deleted": false },
-    "items": [
-      {
-        "id": "9d1d…",
-        "quantity": 2,
-        "unit_price": "49.90",
-        "line_total": "99.80",
-        "product": { "id": "9d1a…", "name": "Mouse sem fio Pro", "sku": "PB-1234-ab", "is_deleted": false }
-      }
-    ]
-  }
-}
-```
-
-### Analytics — regras comuns
-
-| Endpoint | Conteúdo | Parâmetros além de `from` / `to` | Consultas por request |
-|----------|----------|----------------------------------|-----------------------|
-| `GET /api/v1/dashboard` | KPIs: receita, pedidos, ticket médio, clientes | — | 1 |
-| `GET /api/v1/analytics/revenue` | Série temporal da receita + resumo | `granularity` | 2 |
-| `GET /api/v1/analytics/products` | Ranking de produtos + resumo | `sort`, `limit` | 3 |
-| `GET /api/v1/analytics/customers` | Ranking de clientes + indicadores da base | `sort`, `limit` | 4 |
-| `GET /api/v1/analytics/transactions` | Distribuição por status | — | 1 |
-
-Todos são somente leitura (`GET`/`HEAD`; outros métodos → 405) e seguem as mesmas regras:
-
-- **Timezone da Organization:** `organizations.timezone` (IANA, padrão `America/Sao_Paulo`) define o calendário de negócio. O banco guarda UTC; os limites do período são calculados na aplicação e convertidos para UTC. Não existe parâmetro `timezone` (se enviado, é ignorado) e o cliente nunca escolhe a timezone.
-- **Período:** `from` / `to` são datas locais da Organization (`YYYY-MM-DD`), inclusivas — `from` começa às 00:00 locais e `to` termina às 24:00 locais. Informados juntos, `to` ≥ `from`, no máximo 366 dias; fora disso → 422. Sem os dois, o padrão são os **últimos 30 dias incluindo hoje** (o dia atual ainda está em andamento, então o período padrão pode estar incompleto).
-- **Período anterior:** mesmo número de dias, imediatamente antes de `from` (`01/09–30/09` compara com `02/08–31/08`). É devolvido em `meta.previous_period`.
-- **Comparação:** cada métrica é `{ "value", "previous", "change" }`. `change` é a variação percentual com 1 casa decimal (`22.5` = +22,5%): `0.0` quando atual e anterior são zero; `null` quando o anterior é zero e o atual não, ou quando algum dos dois é `null`.
-- **Dinheiro:** strings decimais com 2 casas (`"1250.00"`, `"0.00"` sem vendas), nunca float; a moeda vem em `meta.currency`. Contagens são inteiros; percentuais (só em status analytics) são floats com 1 casa.
-- **Venda = transação `paid`:** Dashboard, Revenue, Products e Customers consideram somente transações com status `paid` e `occurred_at` no período. `pending`, `refunded` e `canceled` não são receita, pedido nem atividade de cliente. `average_order_value` é `null` quando não há pedidos.
-- **Exceção — status analytics:** `/analytics/transactions` mostra todos os status. O `revenue` por status é `SUM(total_amount)` daquele status; somente a linha `paid` é receita no sentido do Dashboard.
-- **`meta`:** `period`, `previous_period`, `timezone`, `currency` e os parâmetros específicos do endpoint (`granularity`, `sort`, `limit`).
-- **Tenant isolation:** sessão Sanctum obrigatória (401 sem sessão) e header `X-Organization-Id` de uma organização da qual o usuário é membro (403 sem membership). Owner e member podem consultar. `organization_id` na query → 422. Todas as consultas partem da organização do contexto: dados de outra organização nunca aparecem nem alteram os números.
-
-**Consistência entre endpoints** (coberta por testes sobre o seed e com dados controlados):
-
-- `dashboard.revenue` = `revenue.summary.revenue` = `products.summary.revenue` = linha `paid` de `/analytics/transactions` (objeto `Comparison` completo, atual e anterior).
-- `dashboard.orders` = `revenue.summary.orders` = `orders` da linha `paid` = `meta.total` de `GET /transactions?status=paid&from&to`.
-- `dashboard.customers` = `customers.summary.active_customers`; `new_customers + returning_customers = active_customers`.
-- Soma dos buckets (`day`, `week`, `month`) = `summary` do Revenue; soma do ranking completo de produtos = receita e unidades do resumo; soma do ranking completo de clientes = receita e pedidos do Dashboard.
-- Soma de `orders` dos 4 status = `meta.total` de `GET /transactions?from&to`; soma do `revenue` dos 4 status = soma de `total_amount` de todas as transações do período.
-- O `previous` de cada métrica é igual ao `value` de um request feito para o período anterior.
-- Cada bucket diário ou mensal do Revenue tem o mesmo número de pedidos que `GET /transactions?status=paid` com o `from` / `to` do bucket: os dois usam o mesmo calendário local.
-
-**Consultas e performance:** o número de consultas por request é fixo (tabela acima). Não cresce com o volume de transações, produtos ou clientes, com `limit`, com a granularidade nem com o tamanho do período, e não há N+1. Os períodos atual e anterior são lidos numa única varredura (`CASE` na data de início). Medido com `EXPLAIN ANALYZE` no PostgreSQL 16 em um banco descartável com 200 mil transações e 500 mil itens (organização principal com 120 mil transações em 2 anos): com 30 dias, cada consulta levou de ~2 a ~45 ms; com 366 dias, até ~300 ms (resumo de produtos, dominado pelo `COUNT(DISTINCT)` com `work_mem` padrão). Os índices existentes `transactions (organization_id, occurred_at)` e `(organization_id, status)` bastam: o candidato `(organization_id, status, occurred_at)` não trouxe ganho material e não foi criado.
-
-**Limitações conhecidas:**
-
-- O status usado é o **atual** da transação: um estorno ou cancelamento posterior muda retroativamente os números do período em que a venda ocorreu (não há histórico de mudanças de status).
-- O período padrão inclui o dia de hoje, ainda incompleto.
-- SQLite (suíte rápida de testes) não tem base de timezones: os buckets do Revenue usam o offset fixo do início do período (exato para `America/Sao_Paulo`, sem horário de verão); os testes de DST dos buckets rodam só no PostgreSQL. Os limites de período dos demais endpoints são calculados na aplicação e são exatos nos dois bancos.
-- Sem cache: cada request consulta o banco.
-
-### Dashboard
-
-`GET /api/v1/dashboard` devolve os KPIs do período, cada um comparado ao período anterior.
-
-| Parâmetro | Formato | Regra |
-|-----------|---------|-------|
-| `from` / `to` | `YYYY-MM-DD` | Dias do calendário na timezone da Organization; informados juntos; `to` ≥ `from`; no máximo 366 dias. Sem os dois, últimos 30 dias incluindo hoje |
-
-- A timezone vem sempre de `organizations.timezone` (padrão `America/Sao_Paulo`); não existe parâmetro `timezone`. Os limites do período são convertidos para UTC antes da consulta (o banco guarda UTC).
-- `organization_id` na query → 422. O tenant vem do header `X-Organization-Id` (membership validada).
-- Período anterior: mesmo número de dias, imediatamente antes de `from` (ex.: `01/09–30/09` compara com `02/08–31/08`).
-
-**KPIs** — consideram **somente transações `paid`** com `occurred_at` dentro do período:
-
-| KPI | Definição | Tipo |
-|-----|-----------|------|
-| `revenue` | `SUM(total_amount)` | string decimal (`"0.00"` sem vendas) |
-| `orders` | quantidade de transações pagas | inteiro |
-| `average_order_value` | `revenue / orders`, arredondado ao centavo (half-up) | string decimal; `null` quando `orders = 0` |
-| `customers` | clientes distintos com ao menos uma transação paga no período (inclui clientes soft-deleted que compraram) | inteiro |
-
-**Comparação** — cada KPI é `{ "value", "previous", "change" }`. `change` é a variação percentual (número com 1 casa decimal, `22.5` = +22,5%): `0.0` quando atual e anterior são zero; `null` quando o anterior é zero e o atual não, ou quando algum valor é `null`.
-
-```http
-GET /api/v1/dashboard?from=2026-09-01&to=2026-09-30
-X-Organization-Id: {organization-uuid}
-Accept: application/json
-```
-
-```json
-{
-  "data": {
-    "revenue": { "value": "12500.00", "previous": "10200.00", "change": 22.5 },
-    "orders": { "value": 98, "previous": 81, "change": 21.0 },
-    "average_order_value": { "value": "127.55", "previous": "125.93", "change": 1.3 },
-    "customers": { "value": 52, "previous": 47, "change": 10.6 }
-  },
-  "meta": {
-    "period": { "from": "2026-09-01", "to": "2026-09-30", "days": 30 },
-    "previous_period": { "from": "2026-08-02", "to": "2026-08-31", "days": 30 },
-    "timezone": "America/Sao_Paulo",
-    "currency": "BRL"
-  }
-}
-```
-
-Sem vendas no período: `revenue` `"0.00"`, `orders` e `customers` `0`, `average_order_value` `null` (e `change` conforme as regras de comparação). Clientes e produtos soft-deleted não alteram o histórico: as vendas deles continuam contando.
-
-Os KPIs saem de uma única consulta agregada no banco. Limitações conhecidas: o status é o estado atual da transação (um estorno remove a receita da data original da venda) e o período padrão inclui o dia de hoje ainda em andamento.
-
-### Revenue analytics
-
-`GET /api/v1/analytics/revenue` devolve a série temporal da receita (somente transações `paid`) no calendário da Organization.
-
-| Parâmetro | Formato | Regra |
-|-----------|---------|-------|
-| `from` / `to` | `YYYY-MM-DD` | Mesmas regras do Dashboard (juntos, máx. 366 dias, padrão últimos 30 dias, timezone da Organization) |
-| `granularity` | `day`, `week`, `month` | Padrão `day`; outro valor → 422 |
-
-- **Buckets:** `day` = cada dia; `week` = semana ISO (segunda a domingo); `month` = mês do calendário. `bucket` é o primeiro dia local do bucket (numa semana parcial pode ser anterior a `from`); `from` / `to` são os dias efetivamente cobertos, recortados ao período — o primeiro e o último bucket podem ser parciais. Uma granularidade maior que o período gera um único bucket parcial.
-- **Todos os buckets do período são retornados**, em ordem cronológica; sem vendas → `"revenue": "0.00"`, `"orders": 0`. A receita é agregada no banco (`GROUP BY` do bucket local) e os buckets vazios são preenchidos na aplicação, sem consultas extras.
-- **Timezone:** uma venda em `2026-09-01T02:59:59Z` pertence ao dia `2026-08-31` em `America/Sao_Paulo`. No PostgreSQL a conversão usa a base de timezones (DST exato).
-- **`summary`:** `revenue` e `orders` do período comparados ao anterior, com a mesma definição e formato do `/dashboard` (soma dos buckets = `summary.revenue.value` = `dashboard.revenue.value`).
-
-```http
-GET /api/v1/analytics/revenue?from=2026-09-02&to=2026-09-16&granularity=week
-X-Organization-Id: {organization-uuid}
-Accept: application/json
-```
-
-```json
-{
-  "data": [
-    { "bucket": "2026-08-31", "from": "2026-09-02", "to": "2026-09-06", "revenue": "1250.00", "orders": 14 },
-    { "bucket": "2026-09-07", "from": "2026-09-07", "to": "2026-09-13", "revenue": "0.00", "orders": 0 },
-    { "bucket": "2026-09-14", "from": "2026-09-14", "to": "2026-09-16", "revenue": "830.40", "orders": 9 }
-  ],
-  "summary": {
-    "revenue": { "value": "2080.40", "previous": "1904.10", "change": 9.3 },
-    "orders": { "value": 23, "previous": 21, "change": 9.5 }
-  },
-  "meta": {
-    "period": { "from": "2026-09-02", "to": "2026-09-16", "days": 15 },
-    "previous_period": { "from": "2026-08-18", "to": "2026-09-01", "days": 15 },
-    "timezone": "America/Sao_Paulo",
-    "currency": "BRL",
-    "granularity": "week"
-  }
-}
-```
-
-Soft delete não afeta a série: vendas de clientes e produtos excluídos continuam contando. Duas consultas agregadas por request (série + resumo), independentemente do volume ou do número de buckets (366 dias diários continuam sendo 2 consultas). Limitações: as mesmas do Dashboard (status atual, dia de hoje parcial). A suíte de testes rápida roda em SQLite, que não tem timezones: lá o bucket usa o offset fixo do início do período (exato para `America/Sao_Paulo`); os testes de DST rodam só no PostgreSQL.
-
-### Product analytics
-
-`GET /api/v1/analytics/products` devolve o ranking dos produtos vendidos no período (somente transações `paid`), cada um comparado ao período anterior.
-
-| Parâmetro | Formato | Regra |
-|-----------|---------|-------|
-| `from` / `to` | `YYYY-MM-DD` | Mesmas regras do Dashboard (juntos, máx. 366 dias, padrão últimos 30 dias, timezone da Organization) |
-| `sort` | `revenue`, `units_sold` | Padrão `revenue`; outro valor → 422 |
-| `limit` | inteiro 1–50 | Padrão 10; fora da faixa → 422. Sem paginação |
-
-- **Receita do produto:** `SUM(line_total)` dos itens pagos, ou seja, o preço no momento da venda (alterar `price` depois não muda o histórico). **Unidades:** `SUM(quantity)`.
-- **Entra no ranking** o produto com ao menos uma venda paga no período atual. Produto vendido só no período anterior não aparece em `data`, mas conta em `summary.*.previous`.
-- **Ordenação:** `sort=revenue` → receita, unidades, nome, id; `sort=units_sold` → unidades, receita, nome, id. `rank` começa em 1.
-- **Produtos soft-deleted e `inactive`** com vendas continuam no ranking (`is_deleted: true` / `status: "inactive"`); compras de clientes soft-deleted também contam.
-- **`summary` não depende de `limit`:** considera todos os produtos vendidos. `revenue` é o mesmo objeto do `/dashboard` (soma do ranking completo = `summary.revenue.value` = `dashboard.revenue.value`); `units_sold` e `products_sold` (produtos distintos) no mesmo formato `{ value, previous, change }`.
-- **Timezone:** só os limites do período dependem da timezone da Organization; eles são calculados na aplicação e convertidos para UTC (DST exato também no SQLite).
-
-```http
-GET /api/v1/analytics/products?from=2026-09-01&to=2026-09-30&sort=revenue&limit=3
-X-Organization-Id: {organization-uuid}
-Accept: application/json
-```
-
-```json
-{
-  "data": [
-    {
-      "rank": 1,
-      "product": { "id": "9d1a…", "name": "Mesa regulável Essential", "sku": "PB-013-ESS", "status": "active", "is_deleted": false },
-      "revenue": { "value": "4649.70", "previous": "3099.80", "change": 50.0 },
-      "units_sold": { "value": 3, "previous": 2, "change": 50.0 }
-    },
-    {
-      "rank": 2,
-      "product": { "id": "9d1b…", "name": "Monitor 24\" Pro", "sku": "PB-010-PRO", "status": "active", "is_deleted": false },
-      "revenue": { "value": "2099.80", "previous": "0.00", "change": null },
-      "units_sold": { "value": 2, "previous": 0, "change": null }
-    },
-    {
-      "rank": 3,
-      "product": { "id": "9d1c…", "name": "Mouse sem fio Essential", "sku": "PB-001-ESS", "status": "inactive", "is_deleted": true },
-      "revenue": { "value": "799.00", "previous": "639.20", "change": 25.0 },
-      "units_sold": { "value": 10, "previous": 8, "change": 25.0 }
-    }
-  ],
-  "summary": {
-    "revenue": { "value": "8120.40", "previous": "6650.30", "change": 22.1 },
-    "units_sold": { "value": 31, "previous": 26, "change": 19.2 },
-    "products_sold": { "value": 7, "previous": 6, "change": 16.7 }
-  },
-  "meta": {
-    "period": { "from": "2026-09-01", "to": "2026-09-30", "days": 30 },
-    "previous_period": { "from": "2026-08-02", "to": "2026-08-31", "days": 30 },
-    "timezone": "America/Sao_Paulo",
-    "currency": "BRL",
-    "sort": "revenue",
-    "limit": 3
-  }
-}
-```
-
-Sem vendas no período: `"data": []` e `summary` zerado (`change: 0.0` se o anterior também é zero, `null` se só o anterior é zero).
-
-Três consultas agregadas por request (ranking com os dados do produto via join, totais de itens e KPIs do Dashboard), independentemente do número de produtos ou de `limit` — sem N+1. Limitações: as mesmas do Dashboard (status atual, dia de hoje parcial).
-
-### Customer analytics
-
-`GET /api/v1/analytics/customers` devolve os indicadores da base de clientes e o ranking dos clientes que mais compraram no período, tudo comparado ao período anterior.
-
-| Parâmetro | Formato | Regra |
-|-----------|---------|-------|
-| `from` / `to` | `YYYY-MM-DD` | Mesmas regras do Dashboard (juntos, máx. 366 dias, padrão últimos 30 dias, timezone da Organization) |
-| `sort` | `revenue`, `orders` | Padrão `revenue`; outro valor → 422 |
-| `limit` | inteiro 1–50 | Padrão 10; fora da faixa → 422. Sem paginação |
-
-**Summary** — cada métrica no formato `{ value, previous, change }`, sempre sobre todos os clientes (independe de `limit`):
-
-| Métrica | Definição |
-|---------|-----------|
-| `total_customers` | Clientes cadastrados até o fim do período (`created_at` anterior ao fim do dia `to` local) e não excluídos até esse instante. Um cliente excluído depois do fim continua contando naquele período. Para um período que termina hoje, igual a `meta.total` de `GET /customers` |
-| `active_customers` | Clientes distintos com ao menos uma transação `paid` no período — o mesmo valor de `customers` no `/dashboard` |
-| `new_customers` | Clientes ativos cuja **primeira transação `paid` de todo o histórico** ocorreu no período (independe da data de cadastro) |
-| `returning_customers` | Clientes ativos que já tinham transação `paid` antes do início do período |
-
-`new_customers + returning_customers = active_customers` (em `value` e em `previous`). Transações `pending`, `refunded` e `canceled` não geram atividade nem contam como primeira compra.
-
-**Ranking** — clientes com ao menos uma transação `paid` no período; `revenue` = `SUM(total_amount)` e `orders` = quantidade de transações pagas (mesmas definições do Dashboard e de `total_spent` / `orders_count` em `GET /customers/{id}`). Ordenação: `sort=revenue` → receita, pedidos, nome, id; `sort=orders` → pedidos, receita, nome, id.
-
-- **Soft delete:** o histórico não some. Compras de clientes excluídos continuam em `active`, `new`, `returning` e no ranking (`is_deleted: true`); a exclusão só tira o cliente de `total_customers` a partir do instante em que ocorreu.
-- **Timezone:** as fronteiras (atividade, primeira compra, cadastro e exclusão) são os limites dos dias no calendário da Organization, calculados na aplicação e convertidos para UTC (DST exato também no SQLite). Ex.: uma primeira compra em `2026-09-01T02:30:00Z` é de agosto em `America/Sao_Paulo` (cliente recorrente em setembro) e de setembro em `Europe/Lisbon` (cliente novo).
-
-```http
-GET /api/v1/analytics/customers?from=2026-09-01&to=2026-09-30&sort=revenue&limit=2
-X-Organization-Id: {organization-uuid}
-Accept: application/json
-```
-
-```json
-{
-  "data": [
-    {
-      "rank": 1,
-      "customer": { "id": "9d1b…", "name": "Maria Souza", "email": "maria@example.com", "is_deleted": false },
-      "revenue": { "value": "1250.00", "previous": "1000.00", "change": 25.0 },
-      "orders": { "value": 2, "previous": 1, "change": 100.0 }
-    },
-    {
-      "rank": 2,
-      "customer": { "id": "9d1c…", "name": "João Lima", "email": "joao@example.com", "is_deleted": true },
-      "revenue": { "value": "480.00", "previous": "0.00", "change": null },
-      "orders": { "value": 1, "previous": 0, "change": null }
-    }
-  ],
-  "summary": {
-    "total_customers": { "value": 72, "previous": 70, "change": 2.9 },
-    "active_customers": { "value": 52, "previous": 47, "change": 10.6 },
-    "new_customers": { "value": 6, "previous": 9, "change": -33.3 },
-    "returning_customers": { "value": 46, "previous": 38, "change": 21.1 }
-  },
-  "meta": {
-    "period": { "from": "2026-09-01", "to": "2026-09-30", "days": 30 },
-    "previous_period": { "from": "2026-08-02", "to": "2026-08-31", "days": 30 },
-    "timezone": "America/Sao_Paulo",
-    "currency": "BRL",
-    "sort": "revenue",
-    "limit": 2
-  }
-}
-```
-
-Sem clientes ou sem vendas: `"data": []` e contadores `{ "value": 0, "previous": 0, "change": 0.0 }` (`total_customers` conta os cadastrados mesmo sem compras).
-
-Quatro consultas agregadas por request (ranking com os dados do cliente via join, primeira compra/novos/recorrentes, base de clientes e KPIs do Dashboard), independentemente do número de clientes ou de `limit` — sem N+1. A consulta de primeira compra percorre o histórico pago da organização até o fim do período. Limitações: as mesmas do Dashboard (status atual, dia de hoje parcial). O seed de demonstração não tem clientes excluídos e cadastra todos os clientes antes do histórico de vendas, então nele `total_customers` fica estável; essas regras são cobertas por testes com dados controlados.
-
-### Transaction status analytics
-
-`GET /api/v1/analytics/transactions` devolve a distribuição das transações do período por status, comparada ao período anterior. Aceita apenas `from` / `to` (mesmas regras do Dashboard: juntos, máx. 366 dias, padrão últimos 30 dias, timezone da Organization).
-
-Este endpoint é a **exceção documentada à regra de venda `paid`**: conta transações de todos os status. Cada item de `data` traz `status` e três métricas no formato `{ value, previous, change }`:
-
-| Métrica | Definição |
-|---------|-----------|
-| `orders` | Quantidade de transações do status no período (transações, não itens) |
-| `revenue` | `SUM(total_amount)` das transações do status, em string com 2 casas. Só a linha `paid` é receita no sentido do Dashboard; nas demais é o valor movimentado naquele status |
-| `percentage` | Participação do status no total de transações do período, com 1 casa decimal (float). Sem transações no período → `null`. `change` é a variação relativa entre os percentuais exibidos (65.3 vs 61.8 → 5.7), `null` se algum lado é `null` ou o anterior é zero |
-
-- **Ordem fixa e completa:** sempre os 4 status, na ordem `paid`, `refunded`, `pending`, `canceled`; status sem transações aparece zerado.
-- **Consistência:** a linha `paid` tem `orders` e `revenue` idênticos ao `/dashboard` do mesmo período; a soma de `orders` dos 4 status é igual a `meta.total` de `GET /transactions?from&to`. Por arredondamento, a soma dos percentuais pode ficar em 100.0 ± 0.2.
-- **Status atual:** a transação conta no status que tem hoje e na data de `occurred_at` (um reembolso de uma venda antiga continua no período da venda original).
-
-```http
-GET /api/v1/analytics/transactions?from=2026-09-01&to=2026-09-30
-X-Organization-Id: {organization-uuid}
-Accept: application/json
-```
-
-```json
-{
-  "data": [
-    {
-      "status": "paid",
-      "orders": { "value": 2, "previous": 1, "change": 100.0 },
-      "revenue": { "value": "150.00", "previous": "100.00", "change": 50.0 },
-      "percentage": { "value": 50.0, "previous": 50.0, "change": 0.0 }
-    },
-    {
-      "status": "refunded",
-      "orders": { "value": 1, "previous": 0, "change": null },
-      "revenue": { "value": "30.00", "previous": "0.00", "change": null },
-      "percentage": { "value": 25.0, "previous": 0.0, "change": null }
-    },
-    {
-      "status": "pending",
-      "orders": { "value": 1, "previous": 0, "change": null },
-      "revenue": { "value": "20.00", "previous": "0.00", "change": null },
-      "percentage": { "value": 25.0, "previous": 0.0, "change": null }
-    },
-    {
-      "status": "canceled",
-      "orders": { "value": 0, "previous": 1, "change": -100.0 },
-      "revenue": { "value": "0.00", "previous": "40.00", "change": -100.0 },
-      "percentage": { "value": 0.0, "previous": 50.0, "change": -100.0 }
-    }
-  ],
-  "meta": {
-    "period": { "from": "2026-09-01", "to": "2026-09-30", "days": 30 },
-    "previous_period": { "from": "2026-08-02", "to": "2026-08-31", "days": 30 },
-    "timezone": "America/Sao_Paulo",
-    "currency": "BRL"
-  }
-}
-```
-
-Sem transações em um período: os 4 status com `orders` 0, `revenue` `"0.00"` e `percentage` `null` naquele período.
-
-Uma única consulta agregada por request (agrupada por status, período anterior via `CASE`), sem acessar itens nem clientes. Fronteiras calculadas na aplicação (sem buckets): SQLite e PostgreSQL idênticos, DST incluído.
-
-## Variáveis de ambiente
-
-| Arquivo | Uso |
-|---------|-----|
-| `apps/api/.env.example` | API, Postgres, `FRONTEND_URL`, `SANCTUM_STATEFUL_DOMAINS`, `TRUSTED_PROXIES` |
-| `apps/web/.env.example` | `NUXT_PUBLIC_API_URL`, `NUXT_PUBLIC_API_ORIGIN` |
-
-Não commite arquivos `.env` com secrets.
-
-## Produção
+## Estrutura
 
 ```text
-Cloudflare Pages / Vercel (front estático)
-        ↓
-app.henriqueverri.dev
-        ↓  fetch com cookies (Sanctum SPA)
-api.henriqueverri.dev
-        ↓
-Render Web Service (Free, Docker: Nginx + PHP-FPM)
-        ↓  Supabase Shared Pooler, Session mode (5432), SSL
-Supabase PostgreSQL
+pulseboard/
+├── apps/
+│   ├── api/                # Laravel 12 — API REST e Dockerfile de produção
+│   └── web/                # Nuxt 4 — SPA estática
+├── docs/                   # arquitetura, API, testes, deploy e screenshots
+├── .github/workflows/      # CI
+├── docker-compose.yml      # PostgreSQL local
+└── render.yaml             # Blueprint da API no Render
 ```
 
-O banco não fica no Render: a API usa o PostgreSQL do Supabase. Não há Redis, worker, fila nem cron.
+Detalhes de cada app: [`apps/api/README.md`](apps/api/README.md) e [`apps/web/README.md`](apps/web/README.md).
 
-### Requisito de domínio
+## Portfólio vs. produto comercial
 
-A autenticação é Sanctum SPA: sessão em cookie httpOnly `SameSite=Lax` e CSRF pelo cookie `XSRF-TOKEN`, que o front lê via `document.cookie` e devolve no header `X-XSRF-TOKEN`. Isso só funciona se front e API estiverem no **mesmo site** (mesmo domínio registrável): `app.henriqueverri.dev` e `api.henriqueverri.dev` com `SESSION_DOMAIN=.henriqueverri.dev`.
+O PulseBoard é um produto funcional, mas foi construído como portfólio. O que é deliberadamente de demonstração:
 
-As URLs padrão das plataformas (`*.onrender.com`, `*.pages.dev`, `*.vercel.app`) são sites diferentes — os sufixos estão na Public Suffix List. Nelas o navegador não envia o cookie de sessão nas chamadas da API e o front não consegue ler o `XSRF-TOKEN`, então **o login não funciona sem o domínio próprio** (a URL `*.onrender.com` serve só para conferir o health check).
+- as transações vêm de um gerador de dados de demo — não há ingestão de vendas reais;
+- cadastro aberto e dados de demo restauráveis;
+- hospedagem em planos gratuitos (cold start da API, banco que pausa sem uso) e um único ambiente, sem staging;
+- interface só em pt-BR e moeda fixa em BRL.
 
-### API no Render
+## Roadmap
 
-Web Service **Free** com runtime **Docker**, definido em [`render.yaml`](render.yaml) (Blueprint):
+O que seria necessário para operar comercialmente:
 
-| Configuração | Valor |
-|--------------|-------|
-| Dockerfile | `./apps/api/Dockerfile` (caminho relativo à raiz do repositório) |
-| Docker build context | `./apps/api` |
-| Branch / auto deploy | `main`, deploy automático quando os checks da CI passam (`autoDeployTrigger: checksPass`) |
-| Build filter | `apps/api/**` (mudanças só no front não redeployam a API; testes e `.md` ignorados) |
-| Health check | `/api/v1/health` (200 com `{"status":"ok","database":"ok"}`, 503 se o banco não responde) |
-| Domínio | `api.henriqueverri.dev` (custom domain, HTTPS automático) |
+- **Ingestão de vendas:** importação CSV, API pública e integrações com e-commerce e gateways de pagamento.
+- **Equipe:** convites, gestão de membros e papéis (o modelo de membership já existe e a UI já troca de organização).
+- **Configurações da organização:** editar nome, timezone e moeda pela interface.
+- **Contas:** recuperação de senha, verificação de e-mail e 2FA.
+- **Histórico de status das transações**, para que estornos não alterem retroativamente o período da venda original.
+- **Billing e planos.**
+- **Operação:** staging, observabilidade (erros e métricas), backups gerenciados, pré-agregação ou cache para organizações grandes.
+- **Internacionalização** e multi-moeda.
 
-Sem usar o Blueprint, os mesmos valores vão no Dashboard: *New → Web Service*, runtime Docker, deixe **Root Directory vazio** e preencha *Dockerfile Path* `./apps/api/Dockerfile` e *Docker Build Context Directory* `./apps/api`; em *Build Filters*, inclua `apps/api/**`.
+## Licença
 
-O Render Free não tem Pre-Deploy Command nem Shell, então migrations e demo rodam no start do container ([`apps/api/docker/entrypoint.sh`](apps/api/docker/entrypoint.sh)):
-
-1. `php artisan optimize` — cache de config, rotas, eventos e views, gerado no runtime (as variáveis não existem no build);
-2. `php artisan pulseboard:release` — `migrate --force` e depois `pulseboard:demo`, segurando um advisory lock do PostgreSQL: se dois containers sobem ao mesmo tempo (restart durante um deploy), o segundo espera e encontra tudo pronto;
-3. PHP-FPM + Nginx na porta `$PORT` (o Render define; padrão 10000).
-
-Qualquer falha nesses passos (banco inacessível, migration quebrada, `DEMO_PASSWORD` ausente ou curta) derruba o container antes de ele aceitar tráfego; num deploy, o Render mantém a versão anterior no ar. O Free hiberna o serviço após ~15 min sem requisições: o primeiro acesso depois disso espera o container subir de novo (e repetir os passos acima, que são idempotentes).
-
-### Banco no Supabase
-
-Use a connection string do **Shared Pooler em Session mode** (*Connect → Session pooler* no painel do Supabase), porta **5432**:
-
-```text
-postgresql://postgres.<project-ref>:<senha-url-encoded>@aws-0-<região>.pooler.supabase.com:5432/postgres
-```
-
-- **Não** use a conexão direta (`db.<ref>.supabase.co`): ela é só IPv6 e o Render não tem saída IPv6.
-- **Não** use o Transaction mode (porta 6543): o PDO usa prepared statements no servidor e o `pulseboard:release` usa advisory lock de sessão; os dois exigem Session mode.
-- Caracteres especiais da senha precisam de URL-encoding (`@` → `%40`, `:` → `%3A`, `/` → `%2F`).
-- `DB_SSLMODE=require` força TLS na conexão.
-- O pool do Shared Pooler é pequeno; o PHP-FPM usa no máximo 5 workers (uma conexão cada).
-- No plano Free do Supabase o projeto pausa após alguns dias sem atividade; com o banco pausado o health check responde 503 e o deploy falha até reativá-lo no painel.
-
-### Variáveis de produção
-
-Nenhum valor real vai para o Git. No `render.yaml`, os secrets (`APP_KEY`, `DB_URL`, `DEMO_PASSWORD`) usam `sync: false`: o Render pede os valores ao criar o Blueprint.
-
-| Variável | Valor |
-|----------|-------|
-| `APP_NAME` | `PulseBoard` |
-| `APP_ENV` | `production` |
-| `APP_DEBUG` | `false` |
-| `APP_KEY` | secret — gerar localmente com `php artisan key:generate --show` |
-| `APP_URL` | `https://api.henriqueverri.dev` |
-| `FRONTEND_URL` | `https://app.henriqueverri.dev` (origem exata liberada no CORS) |
-| `SANCTUM_STATEFUL_DOMAINS` | `app.henriqueverri.dev` (host do front, sem esquema) |
-| `SESSION_DRIVER` | `database` |
-| `SESSION_DOMAIN` | `.henriqueverri.dev` |
-| `SESSION_SECURE_COOKIE` | `true` |
-| `SESSION_SAME_SITE` | `lax` |
-| `CACHE_STORE` | `database` (tabelas criadas pelas migrations; sem Redis) |
-| `QUEUE_CONNECTION` | `database` (nenhum job é despachado; sem worker) |
-| `DB_CONNECTION` | `pgsql` |
-| `DB_URL` | secret — `<SUPABASE_SESSION_POOLER_URL>` (ver acima) |
-| `DB_SSLMODE` | `require` |
-| `TRUSTED_PROXIES` | `*` (a API só é acessível pelo proxy do Render; sem isso as requisições parecem HTTP e o rate limit de login trata todos os usuários como o mesmo IP) |
-| `LOG_CHANNEL` | `stderr` (logs aparecem no painel do Render) |
-| `LOG_LEVEL` | `info` |
-| `DEMO_PASSWORD` | secret — senha das contas de demonstração (mínimo 12 caracteres; é a senha que você divulga no portfólio) |
-| `DEMO_OWNER_EMAIL` / `DEMO_MEMBER_EMAIL` | `demo@example.com` / `demo-member@example.com` (padrão) |
-
-`PORT` é definida pelo próprio Render. Não há filas, jobs, e-mails nem storage de arquivos em uso: não é preciso worker, Redis ou volume.
-
-### Dados de demonstração
-
-`php artisan pulseboard:demo` cria a organização "PulseBoard Demo Store" (slug `pulseboard-demo`) com uma conta owner e uma member, 40 produtos, 70 clientes e ~90 dias de vendas terminando hoje. Não usa Faker nem factories, e só mexe nessa organização:
-
-- sem `DEMO_PASSWORD` (ou com menos de 12 caracteres) o comando falha sem gravar nada;
-- se a demo já existe, não altera os dados, só sincroniza a senha das duas contas com `DEMO_PASSWORD` — por isso pode rodar em todo deploy;
-- `--refresh` apaga produtos, clientes e transações **somente da organização de demo** (inclusive o que visitantes criaram) e gera o histórico de novo, terminando no dia atual;
-- recusa rodar se um dos e-mails de demo pertence a uma conta de outra organização, ou se o slug pertence a uma organização que não é da conta demo owner.
-
-Em produção ele roda a cada start do container (via `pulseboard:release`), sem `--refresh`.
-
-O histórico é relativo à data do seed: com o período padrão de 30 dias, o dashboard esvazia cerca de um mês depois. O Render Free não tem Shell nem cron, então rode o refresh periodicamente da sua máquina, apontando para o Supabase (variáveis só no terminal, nunca num arquivo versionado):
-
-```bash
-cd apps/api
-DB_URL='<SUPABASE_SESSION_POOLER_URL>' DB_SSLMODE=require DEMO_PASSWORD='<senha da demo>' \
-  php artisan pulseboard:demo --refresh
-```
-
-O `DatabaseSeeder` (`migrate:fresh --seed`) continua sendo só para desenvolvimento: usa factories e cria `test@example.com` / `password`.
-
-### Front no Cloudflare Pages
-
-Projeto conectado ao repositório:
-
-| Configuração | Valor |
-|--------------|-------|
-| Root directory | `apps/web` |
-| Build command | `bun install --frozen-lockfile && bun run generate` |
-| Build output directory | `dist` |
-| Variáveis de build | `NUXT_PUBLIC_API_URL=https://api.henriqueverri.dev/api/v1`, `NUXT_PUBLIC_API_ORIGIN=https://api.henriqueverri.dev`, `BUN_VERSION=1.3.10` |
-| Domínio | `app.henriqueverri.dev` |
-
-No Pages (`CF_PAGES`), o Nitro usa o preset `cloudflare-pages-static`: gera `dist/`, headers de cache imutável para `/_nuxt/*` e mescla o `public/_headers` (anti-clickjacking). As URLs da API são embutidas no HTML durante o build; se as duas variáveis faltarem, o build falha de propósito. Não há `404.html`, então o Pages usa o fallback de SPA e rotas como `/products/:id` abrem direto.
-
-### Checklist do primeiro deploy
-
-1. Domínio `henriqueverri.dev` com os subdomínios `app` (front) e `api` (API).
-2. Supabase: copiar a connection string do Session pooler (porta 5432).
-3. Render: *New → Blueprint* apontando para este repositório (lê o `render.yaml`) e preencher `APP_KEY`, `DB_URL` e `DEMO_PASSWORD`.
-4. Nos logs do primeiro deploy, conferir as migrations e a linha "Demo organization seeded"; depois `https://<serviço>.onrender.com/api/v1/health`.
-5. Custom domain `api.henriqueverri.dev` no Render (CNAME no DNS) e conferir `https://api.henriqueverri.dev/api/v1/health`.
-6. Front (Cloudflare Pages ou Vercel) com as variáveis de build e o custom domain `app.henriqueverri.dev`.
-7. Login no front com `DEMO_OWNER_EMAIL` / `DEMO_PASSWORD`, criar/editar/remover um produto e navegar pelo analytics.
-
-## Limitações conhecidas
-
-- Sem domínio próprio compartilhado entre front e API, a autenticação não funciona em produção (ver acima). Previews do Pages (`<hash>.<projeto>.pages.dev`) também não autenticam: não estão no CORS nem no `SANCTUM_STATEFUL_DOMAINS`.
-- Um único ambiente de produção; sem staging.
-- A conta demo owner pode alterar os dados da demo (é o objetivo); `--refresh` restaura o estado original.
-- Render Free: o serviço hiberna sem tráfego (primeiro acesso lento) e cada start roda `optimize` + migrations + demo antes de aceitar requisições.
-- Sem monitoramento de erros externo: os logs são o `stderr` do container, no painel do Render.
-- Suíte PHPUnit local em SQLite por padrão; a paridade com PostgreSQL é garantida na CI.
-
-## Status do projeto
-
-- [x] Fase 1 — Foundation  
-- [x] Fase 2 — Authentication  
-- [x] Fase 3 — Core domain  
-- [x] Fase 4 — API de negócio: 4A Products + Customers, 4B Transactions (read-only) e 4C Analytics concluídas (4C.1 timezone + fundação, 4C.2 Dashboard, 4C.3 Revenue, 4C.4 Products, 4C.5 Customers, 4C.6 Transaction status, 4C.7 consistência + performance + docs)  
-- [x] Frontend (F1–F10): auth, shell, CRUDs, transações, dashboard, analytics, acessibilidade e smoke E2E  
-- [x] CI (GitHub Actions: API em PostgreSQL, web, E2E)  
-- [x] Produção preparada (F11): configuração e documentação de deploy  
-- [x] Imagem Docker da API e Blueprint do Render (Render Free + Supabase)  
-- [ ] Deploy real (depende do domínio e das contas Render/Supabase/front)  
+[MIT](LICENSE)

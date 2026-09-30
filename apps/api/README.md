@@ -2,7 +2,7 @@
 
 API REST em Laravel 12 (PHP 8.4) com autenticação Sanctum SPA (cookie de sessão + CSRF), multi-tenancy por Organization (`X-Organization-Id` + membership) e PostgreSQL.
 
-Setup local, contratos dos endpoints, testes, CI e deploy estão no [README da raiz](../README.md).
+Visão geral e setup local no [README da raiz](../../README.md). Contratos dos endpoints em [`docs/api.md`](../../docs/api.md), decisões em [`docs/architecture.md`](../../docs/architecture.md), testes em [`docs/testing.md`](../../docs/testing.md) e deploy em [`docs/deployment.md`](../../docs/deployment.md).
 
 ## Comandos
 
@@ -46,4 +46,4 @@ Alpine com PHP 8.4-FPM (`pdo_pgsql`, OPcache sem revalidação), Nginx e depend�
 3. `php artisan pulseboard:release`: `migrate --force` e `pulseboard:demo`, sob um advisory lock do PostgreSQL (dois containers subindo juntos rodam um depois do outro);
 4. sobe PHP-FPM (`127.0.0.1:9000`) e Nginx (porta `$PORT`), e encerra o container se qualquer um cair.
 
-Se algum passo falhar (por exemplo `DEMO_PASSWORD` ausente ou curta, ou banco inacessível), o container sai com erro e o Render mantém o deploy anterior no ar. Detalhes do deploy no [README da raiz](../README.md#produção).
+Se algum passo falhar (por exemplo `DEMO_PASSWORD` ausente ou curta, ou banco inacessível), o container sai com erro e o Render mantém o deploy anterior no ar. Detalhes do deploy em [`docs/deployment.md`](../../docs/deployment.md).

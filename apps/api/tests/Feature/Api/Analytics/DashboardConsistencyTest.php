@@ -7,6 +7,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Support\Analytics\ReportingPeriod;
 use App\Support\Money;
+use Database\Seeders\DemoDataSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
@@ -66,9 +67,10 @@ class DashboardConsistencyTest extends TestCase
     public function test_recent_revenue_reflects_the_seeded_growth_trend(): void
     {
         $recent = ReportingPeriod::lastDays(30, $this->organization->timezone);
+        $historyStart = $recent->toDate()->subDays(DemoDataSeeder::HISTORY_DAYS - 1);
         $earliest = ReportingPeriod::fromDates(
-            $recent->fromDate()->subDays(60)->toDateString(),
-            $recent->toDate()->subDays(60)->toDateString(),
+            $historyStart->toDateString(),
+            $historyStart->addDays(29)->toDateString(),
             $this->organization->timezone,
         );
 
