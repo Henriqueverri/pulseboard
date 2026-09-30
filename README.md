@@ -1,205 +1,207 @@
 # PulseBoard
 
-**SaaS multi-tenant de gestão comercial e métricas.** Produtos, clientes e vendas de uma organização num só lugar, com dashboard e analytics calculados no backend, no fuso horário da organização.
-
-Projeto de portfólio full stack, construído de ponta a ponta — produto, API, frontend, testes, CI e deploy — para demonstrar como eu projeto e entrego uma aplicação SaaS completa.
+**SaaS multi-tenant de gestão comercial e analytics.** Catálogo, clientes e vendas por organização, com dashboard e métricas calculados no backend, no fuso horário de cada organização.
 
 [![CI](https://github.com/Henriqueverri/pulseboard/actions/workflows/ci.yml/badge.svg)](https://github.com/Henriqueverri/pulseboard/actions/workflows/ci.yml)
 [![Demo](https://img.shields.io/badge/demo-app.henriqueverri.dev-4f46e5)](https://app.henriqueverri.dev)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+- **Em produção:** [app.henriqueverri.dev](https://app.henriqueverri.dev) (SPA) e `api.henriqueverri.dev` (API), com deploy contínuo a partir da `main`.
+- **Stack:** Nuxt 4 · Vue 3 · TypeScript · Laravel 12 · PHP 8.4 · PostgreSQL 16.
+- **Documentação técnica:** [arquitetura](docs/architecture.md) · [API](docs/api.md) · [testes](docs/testing.md) · [deploy](docs/deployment.md).
 
 ![Dashboard do PulseBoard com KPIs comparados ao período anterior, receita diária, distribuição por status e rankings](docs/screenshots/dashboard.png)
 
 ## Demo
 
-**[app.henriqueverri.dev](https://app.henriqueverri.dev)**
+**[app.henriqueverri.dev](https://app.henriqueverri.dev)** — demo pública, com contas compartilhadas:
 
 | Conta | E-mail | Senha |
 |-------|--------|-------|
 | Owner (acesso completo, inclusive exclusão) | `demo@example.com` | `PulseBoardDemo2026!` |
 | Member (sem permissão de exclusão) | `demo-member@example.com` | `PulseBoardDemo2026!` |
 
+O que dá para explorar: dashboard com comparação ao período anterior, as quatro abas de analytics (receita, produtos, clientes e status), CRUD de produtos e clientes, transações com filtros e detalhe, e a diferença de permissões entre owner e member.
+
 - A API roda no plano gratuito do Render: **o primeiro acesso depois de um período ocioso pode levar até ~1 minuto** enquanto o container sobe.
-- A organização de demo tem 40 produtos, 70 clientes e ~6 meses de vendas, completadas até o dia atual sempre que a API sobe. Fique à vontade para criar, editar e excluir — a demo pode ser restaurada ao estado original.
+- A organização de demo tem 40 produtos, 70 clientes e ~6 meses de vendas, completadas até o dia atual sempre que a API sobe. Dados criados ou excluídos por visitantes podem ser restaurados ao estado original.
 
 | Analytics de clientes | Transações | Mobile |
 |---|---|---|
 | ![Analytics de clientes: base, ativos, novos e recorrentes com ranking](docs/screenshots/analytics-customers.png) | ![Lista de transações com filtros por status, cliente e período](docs/screenshots/transactions.png) | ![Dashboard em tela de celular](docs/screenshots/dashboard-mobile.png) |
 
-## O problema
+## O que é o PulseBoard
 
-Pequenos negócios costumam acompanhar vendas em planilhas ou nos relatórios fragmentados de cada ferramenta. Perguntas simples — *quanto vendi este mês comparado ao anterior? quais produtos puxam a receita? quantos clientes voltaram a comprar?* — exigem trabalho manual e dão respostas diferentes dependendo de quem calcula.
+Uma aplicação para acompanhar a operação comercial de um negócio: *quanto vendi neste período comparado ao anterior, quais produtos puxam a receita, quantos clientes voltaram a comprar*. O domínio implementado:
 
-O PulseBoard centraliza catálogo, clientes e transações por organização e responde essas perguntas com **definições únicas de métrica** (receita, pedidos, ticket médio, clientes ativos, novos e recorrentes), sempre comparadas ao período anterior e no calendário local do negócio.
+- **Organizações e papéis** — o cadastro cria o usuário, a organização e a membership `owner`; `owner` e `member` têm permissões diferentes, aplicadas pela API.
+- **Produtos e clientes** — CRUD com busca, detalhe com métricas de venda e exclusão que preserva o histórico (soft delete quando há vendas).
+- **Transações** — histórico de vendas somente leitura, com itens e preço no momento da venda.
+- **Dashboard e analytics** — receita, pedidos, ticket médio e clientes (ativos, novos e recorrentes), receita por dia/semana/mês, rankings e distribuição por status, sempre com o período anterior ao lado.
+- **Estado na URL** — período, filtros, ordenação e paginação ficam na query string: links compartilháveis, voltar/avançar funcionam.
 
-**Para quem:** donos e gestores de pequenos comércios e lojas online que precisam de visibilidade comercial sem montar uma stack de BI.
+## Destaques técnicos
 
-## Funcionalidades
+### Multi-tenancy
 
-- **Dashboard** — receita, pedidos, ticket médio e clientes ativos com variação vs. período anterior; receita no tempo; distribuição por status; top 5 produtos e clientes.
-- **Analytics** — receita por dia, semana ou mês; ranking de produtos (receita ou unidades); clientes novos vs. recorrentes e ranking; distribuição de transações por status.
-- **Períodos** — presets (7 dias, 30 dias, 90 dias, 12 meses, mês atual, mês anterior) ou intervalo personalizado. Período, filtros, ordenação e paginação ficam na URL: links compartilháveis e voltar/avançar funcionam.
-- **Produtos e clientes** — CRUD com busca e detalhe com métricas de venda; a exclusão preserva o histórico (soft delete quando há vendas).
-- **Transações** — listagem somente leitura com filtros (status, cliente, período, busca) e detalhe com itens e preço no momento da venda.
-- **Organizações e papéis** — o cadastro cria a organização; `owner` e `member` têm permissões diferentes, aplicadas pela API.
-- **Acessibilidade e responsividade** — axe-core sem violações nas telas principais, navegação por teclado, layout de 360 px a desktop.
+Banco compartilhado com `organization_id` em toda tabela de domínio. O header `X-Organization-Id` **seleciona o contexto, mas não autoriza sozinho**: o middleware `EnsureOrganizationContext` valida a membership a cada requisição e registra a organização atual no container.
 
-## Stack
+| Camada | Garantia | Resposta |
+|--------|----------|----------|
+| Sessão Sanctum | usuário autenticado | 401 |
+| Middleware | usuário é membro da organização do header | 403 |
+| Route model binding (`BelongsToOrganization`) | recurso pertence à organização atual | 404 (não revela existência) |
+| Form Requests | `organization_id` no payload ou na query é proibido — o tenant nunca vem do cliente | 422 |
+| Models | transação não referencia cliente, nem item referencia produto, de outra organização | exceção |
+| Policies | papel (`owner` / `member`), por exemplo só `owner` exclui | 403 |
 
-| Camada | Tecnologias |
-|--------|-------------|
-| Frontend | Nuxt 4 (SPA), Vue 3, TypeScript, Pinia, Tailwind CSS, reka-ui, Chart.js |
-| Backend | Laravel 12, PHP 8.4, Laravel Sanctum (SPA auth) |
-| Banco | PostgreSQL 16 |
-| Testes | PHPUnit, Vitest + @nuxt/test-utils, Playwright |
-| Infra | GitHub Actions, Cloudflare Pages, Render (Docker: Nginx + PHP-FPM), Supabase PostgreSQL |
+Testes dedicados (`ApiTenantIsolationTest`, `AnalyticsTenantIsolationTest`, `TenantIsolationTest`) verificam que dados de outra organização não aparecem em listagens **nem alteram números agregados**.
+
+### Autenticação e segurança
+
+- **Sanctum SPA:** sessão em cookie `httpOnly`, `Secure`, `SameSite=Lax`; CSRF via `XSRF-TOKEN` / `X-XSRF-TOKEN`, com retry automático em 419. Nenhuma credencial em `localStorage` ou `sessionStorage`; o Pinia guarda só o estado de UI.
+- **Consequência assumida:** front e API precisam estar no mesmo site (`app.` e `api.` sob `henriqueverri.dev`), porque os domínios padrão das plataformas estão na Public Suffix List.
+- CORS restrito à origem exata do front; rate limit de 6 req/min em login e cadastro; `TRUSTED_PROXIES` para que o rate limit use o IP real atrás do proxy do Render (coberto por teste).
+- Erros de `api/*` sempre em JSON sem expor classes internas; `?redirect=` pós-login aceita apenas caminhos internos; front com `X-Frame-Options: DENY` e `frame-ancestors 'none'`.
+
+### Analytics e consistência de dados
+
+- **Tudo agregado em SQL no backend**, um service por endpoint; o front não recalcula nada. Revenue, Products e Customers reutilizam os KPIs do `DashboardService`, então o resumo de cada tela é o mesmo número do dashboard por construção.
+- **Uma definição de venda** (transações `paid`), com a distribuição por status como exceção documentada.
+- **Período anterior de mesma duração** em todas as métricas (`value`, `previous`, `change`), lido na mesma varredura do período atual.
+- **Dinheiro como string decimal** na API (`"1250.00"`), nunca float.
+- **Número fixo de consultas por endpoint** (de 1 a 4), independente de volume, período ou granularidade — travado por `AnalyticsQueryBudgetTest`.
+- **Consistência entre endpoints testada:** receita do dashboard = soma da série temporal = soma do ranking completo de produtos = linha `paid` da distribuição por status; pedidos batem com a listagem de transações.
+- **Performance medida** com `EXPLAIN ANALYZE` sobre 200 mil transações: ~2–45 ms por consulta em 30 dias, até ~300 ms em 366 dias. Um índice composto candidato foi medido e descartado por não trazer ganho material ([detalhes](docs/architecture.md#performance)).
+
+### Timezone
+
+O banco guarda UTC; o calendário de negócio é o fuso IANA da organização (`organizations.timezone`) e o cliente nunca escolhe a timezone. Os limites de período são calculados na aplicação e convertidos para UTC; os buckets de dia, semana ISO e mês são agrupados no fuso local pelo PostgreSQL (`AT TIME ZONE`), com horário de verão correto — testado na CI. Uma venda em `2026-09-01T02:59:59Z` pertence a 31/08 em `America/Sao_Paulo`, e o front calcula "hoje" e os presets no mesmo fuso.
+
+### Testes
+
+| Suíte | Ferramenta | O que cobre |
+|-------|-----------|-------------|
+| API | PHPUnit — 376 testes | Auth, isolamento entre organizações, CRUD e regras de exclusão, analytics com dados controlados e sobre o dataset de demo, orçamento de consultas, timezone e horário de verão, trusted proxies, comandos de release e demo |
+| Web | Vitest + @nuxt/test-utils — 168 testes | Utilitários (dinheiro, datas, períodos), `useApiClient` (CSRF, 419, 401), store de sessão, composables e páginas com fixtures no formato real da API |
+| E2E | Playwright | Login → dashboard → criar, editar e excluir produto → transação → abas de analytics, contra o build de produção e um PostgreSQL descartável |
+
+Localmente a suíte da API roda em SQLite (2 testes de horário de verão ficam de fora); na CI roda inteira em PostgreSQL. Como rodar: [`docs/testing.md`](docs/testing.md).
+
+### CI/CD e deploy
+
+[GitHub Actions](.github/workflows/ci.yml) em push na `main` e em pull requests:
+
+- **`api`** — Pint, migrations em PostgreSQL 16 limpo, PHPUnit completo em PostgreSQL;
+- **`web`** — ESLint, typecheck (`vue-tsc`), Vitest e build estático;
+- **`e2e`** — só depois dos dois anteriores: PostgreSQL + API com dados de demo (senha aleatória por execução, mascarada nos logs) + build estático + Playwright; traces como artefato em caso de falha.
+
+Publicação pelas integrações nativas das plataformas:
+
+- **Frontend → Cloudflare Pages:** build estático a cada push na `main`.
+- **API → Render (Docker, Nginx + PHP-FPM):** publicada **só depois que os checks da CI passam** e só quando `apps/api/**` muda. No start, o container roda as migrations e a sincronização da demo sob advisory lock do PostgreSQL; se algo falhar, ele não aceita tráfego e a versão anterior continua no ar. Health check em `/api/v1/health` verifica também o banco.
+- **Banco → Supabase PostgreSQL:** Session pooler com TLS.
 
 ## Arquitetura
 
-```mermaid
-flowchart LR
-  B[Navegador] --> W["Nuxt 4 SPA (estático)<br/>Cloudflare Pages<br/>app.henriqueverri.dev"]
-  W -- "REST + cookie de sessão<br/>(Sanctum SPA, CSRF)" --> A["API Laravel 12<br/>Render · Docker<br/>api.henriqueverri.dev"]
-  A --> D[("PostgreSQL<br/>Supabase")]
-  G[GitHub] -- push --> CI[GitHub Actions CI]
-  G -- integração nativa --> W
-  CI -- "checks verdes → deploy" --> A
+```text
+Navegador
+   │
+   ▼
+Nuxt 4 SPA estática ─────────────── Cloudflare Pages · app.henriqueverri.dev
+   página → composable → repository → useApiClient
+   │
+   │  REST + cookie de sessão (Sanctum SPA, CSRF) + X-Organization-Id
+   ▼
+API Laravel 12 ──────────────────── Render · Docker · api.henriqueverri.dev
+   middleware de tenant → Form Request → Controller (fino)
+     → Policy → Service (agregações SQL) → API Resource
+   │
+   ▼
+PostgreSQL ──────────────────────── Supabase
 ```
 
-Monorepo com dois apps independentes: `apps/web` (SPA gerada estaticamente) e `apps/api` (API REST). Frontend e backend têm deploys separados; todo cálculo de métrica acontece na API.
+- **Monorepo com dois apps independentes** (`apps/web`, `apps/api`), sem código compartilhado e com deploys separados.
+- **Backend:** controllers finos; validação em Form Requests; autorização em Policies; regras de analytics em services (`app/Services/Analytics`) apoiados por value objects (`ReportingPeriod`, `Comparison`, `Money`); serialização em API Resources. Não há camada de repository no backend: os services consultam via Eloquent e query builder a partir da organização do contexto.
+- **Frontend:** nenhum componente faz HTTP direto — o acesso passa por repositories e pelo `useApiClient`, que centraliza credenciais, header de organização, CSRF e normalização de erros. Pinia só para a sessão; dados de tela via `useAsyncData` com chave por organização.
 
-- **Backend:** controllers finos → Form Requests → services de analytics (um por endpoint, agregações em SQL) → API Resources. Tenant resolvido por middleware; autorização por Policies.
-- **Frontend:** página → composable → repository → `useApiClient`. Nenhum componente faz HTTP direto; Pinia guarda apenas a sessão (usuário e organização).
+Modelo de dados, alternativas consideradas e limitações conhecidas: [`docs/architecture.md`](docs/architecture.md).
 
 ## Decisões técnicas
 
-| Decisão | Por quê |
-|---------|---------|
-| **Sanctum SPA com cookie httpOnly** em vez de token no `localStorage` | Credencial fora do alcance de JavaScript (mitiga roubo por XSS), CSRF nativo e sem BFF extra. Exige front e API no mesmo site — por isso `app.` e `api.` sob o mesmo domínio. |
-| **Nuxt como SPA estática** (`ssr: false`) | A sessão vive num cookie da API; SSR não agregaria valor e exigiria servidor Node. O build estático vai para uma CDN. |
-| **Multi-tenancy por `organization_id`** em banco compartilhado | Simples de operar, com isolamento garantido em camadas (middleware, escopo de consulta, policies) e coberto por testes. |
-| **Analytics agregadas no backend** | Uma definição de métrica para todas as telas; o front não recalcula nada. Dinheiro trafega como string decimal, nunca float. |
-| **Timezone da organização** como calendário de negócio | "Hoje" e "este mês" dependem de onde o negócio está. O banco guarda UTC; os limites do período são convertidos na aplicação. |
-| **Transações somente leitura** | Representam histórico de vendas; o escopo é gestão e análise, não checkout. Ver [roadmap](#roadmap). |
-| **Sem Redis, filas ou workers** | Nada é assíncrono hoje; sessão e cache no banco mantêm a infra mínima. |
+| Decisão | Por quê | Trade-off |
+|---------|---------|-----------|
+| **Sanctum SPA com cookie httpOnly** | Credencial fora do alcance de JavaScript (mitiga roubo por XSS), CSRF nativo, sem BFF extra | Front e API precisam compartilhar o domínio registrável; previews do Pages não autenticam |
+| **Nuxt como SPA estática** (`ssr: false`) | A sessão é um cookie da API; SSR não agregaria valor e exigiria um servidor Node. O build vai para uma CDN | Sem renderização no servidor (irrelevante para uma área autenticada) |
+| **Multi-tenancy por `organization_id`** em banco compartilhado | Simples de operar; isolamento garantido em camadas e coberto por testes | Isolamento depende da aplicação, não do banco (sem schema por tenant nem RLS) |
+| **Analytics agregadas no backend** | Uma definição de métrica para todas as telas; o front só apresenta | Cada requisição consulta o banco (sem cache) |
+| **Timezone da organização** como calendário de negócio | "Hoje" e "este mês" dependem de onde o negócio está, não do servidor | Um membro em outro fuso vê datas e horários no calendário do negócio, não no seu |
+| **PostgreSQL** | `AT TIME ZONE` com base de timezones, advisory locks para o release e `EXPLAIN ANALYZE` para medir | A suíte local usa SQLite por velocidade; só a CI, em PostgreSQL, cobre o comportamento de timezone por completo |
+| **Transações somente leitura** | Representam histórico; o escopo é gestão e análise, não checkout | Status é o atual: um estorno posterior muda o período da venda original |
+| **Sem Redis, filas ou workers** | Nada é assíncrono hoje; sessão e cache no banco mantêm a infra mínima | Precisa ser revisto quando houver importação ou pré-agregação |
+| **Cloudflare Pages + Render + Supabase** | Front estático em CDN, API em container Docker reproduzível, PostgreSQL gerenciado; deploy da API condicionado à CI | Planos gratuitos: cold start da API, banco pausa sem uso, um único ambiente |
+| **Playwright contra o build de produção** | Valida o artefato que vai para o Pages, com API e PostgreSQL reais | Um único smoke do fluxo principal, não uma suíte E2E extensa |
 
-Detalhes e alternativas consideradas em [`docs/architecture.md`](docs/architecture.md).
+## Stack
 
-## Segurança e autenticação
+| Área | Tecnologias |
+|------|-------------|
+| Frontend | Nuxt 4 (SPA), Vue 3, TypeScript, Pinia, Tailwind CSS, reka-ui, Chart.js |
+| Backend | Laravel 12, PHP 8.4, Laravel Sanctum |
+| Banco e infraestrutura | PostgreSQL 16, Supabase, Render (Docker: Nginx + PHP-FPM), Cloudflare Pages, GitHub Actions |
+| Testes e qualidade | PHPUnit, Vitest + @nuxt/test-utils, Playwright, Laravel Pint, ESLint, `vue-tsc` |
 
-- Sessão em cookie `httpOnly`, `Secure`, `SameSite=Lax`; CSRF via `XSRF-TOKEN` / `X-XSRF-TOKEN`. Nenhum token em `localStorage` ou `sessionStorage`.
-- CORS restrito à origem exata do front, com credentials; rate limit em login e cadastro.
-- Erros de API sempre em JSON, sem expor classes internas; o `?redirect=` pós-login aceita apenas caminhos internos.
-- Front com `X-Frame-Options: DENY` e `frame-ancestors 'none'`; API ciente do proxy (`TRUSTED_PROXIES`) para HTTPS e rate limit pelo IP real.
+## Documentação
 
-## Multi-tenancy
+| Documento | Conteúdo |
+|-----------|----------|
+| [Arquitetura](docs/architecture.md) | Modelo de dados, autenticação, multi-tenancy, analytics, performance, timezone, frontend e limitações conhecidas |
+| [API](docs/api.md) | Contratos REST: autenticação, CRUD, transações e cada endpoint de analytics, com regras de consistência |
+| [Testes](docs/testing.md) | Estratégia, o que cada suíte cobre e como rodar localmente e na CI |
+| [Deploy](docs/deployment.md) | Topologia, Render, Supabase, Cloudflare Pages, variáveis de ambiente e operação da demo |
 
-Cada produto, cliente e transação pertence a uma organização. O header `X-Organization-Id` apenas **seleciona o contexto** — nunca autoriza sozinho. Toda requisição passa por:
-
-1. sessão autenticada → senão **401**;
-2. membership do usuário na organização → senão **403**;
-3. recurso pertencente à organização → senão **404** (não revela a existência);
-4. policy do papel (`owner` / `member`) — por exemplo, só `owner` exclui.
-
-`organization_id` enviado no payload ou na query é rejeitado (**422**). Testes dedicados verificam que dados de uma organização nunca aparecem nem alteram os números de outra.
-
-## Analytics e timezone
-
-- **Definição única de venda:** receita, pedidos, ticket médio e clientes consideram só transações `paid`; a distribuição por status é a exceção documentada.
-- **Comparação automática** com o período anterior de mesma duração (`value`, `previous`, `change`).
-- **Número fixo de consultas por endpoint** (de 1 a 4), independente de volume, período ou granularidade — travado por teste, sem N+1.
-- **Consistência entre endpoints testada:** a receita do dashboard é igual à soma da série temporal, ao total do ranking completo de produtos e à linha `paid` da distribuição por status.
-- **Performance medida** com `EXPLAIN ANALYZE` sobre 200 mil transações: ~2–45 ms por consulta em 30 dias, até ~300 ms em 366 dias. Um índice composto candidato foi avaliado e descartado por não trazer ganho material.
-- **Timezone:** limites de período calculados no fuso IANA da organização e convertidos para UTC; buckets de dia, semana e mês agrupados no fuso local pelo PostgreSQL, com horário de verão correto (testado na CI).
-
-Contratos completos em [`docs/api.md`](docs/api.md).
-
-## Testes
-
-| Suíte | Ferramenta | Cobertura |
-|-------|-----------|-----------|
-| API | PHPUnit (360+ testes) | Auth, isolamento entre organizações, CRUD, regras de exclusão, analytics com dados controlados e sobre o dataset de demo, orçamento de consultas, timezone e horário de verão |
-| Web | Vitest + @nuxt/test-utils (160+ testes) | Utilitários, api client, store de sessão, composables e páginas com fixtures no formato real da API |
-| E2E | Playwright | Login → dashboard → CRUD de produto → transação → analytics, contra o build de produção e um PostgreSQL descartável |
-
-Como rodar cada suíte: [`docs/testing.md`](docs/testing.md).
-
-## CI/CD e deploy
-
-**CI** ([GitHub Actions](.github/workflows/ci.yml), em push na `main` e em pull requests):
-
-- `api` — Pint, migrations em PostgreSQL 16 limpo e a suíte completa em PostgreSQL;
-- `web` — lint, typecheck, Vitest e build estático;
-- `e2e` — sobe PostgreSQL, API com dados de demo (senha aleatória por execução) e o build estático, e roda o Playwright.
-
-**Deploy** pelas integrações nativas das plataformas, sem pipeline de deploy próprio:
-
-- **Frontend** → Cloudflare Pages, build estático a cada push na `main`.
-- **API** → Render (Docker), publicada só depois que os checks da CI passam e só quando `apps/api/**` muda. No start, o container roda as migrations e a sincronização da demo sob advisory lock do PostgreSQL; se algo falhar, a versão anterior continua no ar.
-- **Banco** → Supabase PostgreSQL (Session pooler, TLS).
-
-Configuração completa em [`docs/deployment.md`](docs/deployment.md).
+Cada app tem seu README: [`apps/api`](apps/api/README.md) e [`apps/web`](apps/web/README.md).
 
 ## Rodando localmente
 
 Pré-requisitos: PHP 8.4 com `pdo_pgsql`, Composer 2, bun e Docker.
 
 ```bash
-# 1. PostgreSQL
-docker compose up -d
+docker compose up -d                                   # PostgreSQL
 
-# 2. API — http://localhost:8000
-cd apps/api
-cp .env.example .env
-composer install
-php artisan key:generate
-php artisan migrate:fresh --seed
-php artisan serve --port=8000
+cd apps/api && cp .env.example .env && composer install
+php artisan key:generate && php artisan migrate:fresh --seed
+php artisan serve --port=8000                          # http://localhost:8000
 
-# 3. Frontend — http://localhost:3000 (em outro terminal)
-cd apps/web
-cp .env.example .env
-bun install
-bun run dev
+cd apps/web && cp .env.example .env && bun install     # outro terminal, na raiz
+bun run dev                                            # http://localhost:3000
 ```
 
 Login local: `test@example.com` (owner) ou `member@example.com` (member), senha `password`. O front precisa rodar em `localhost:3000`, a origem liberada no CORS e no Sanctum.
 
-## Estrutura
+## Escopo: portfólio, construído como produto
 
-```text
-pulseboard/
-├── apps/
-│   ├── api/                # Laravel 12 — API REST e Dockerfile de produção
-│   └── web/                # Nuxt 4 — SPA estática
-├── docs/                   # arquitetura, API, testes, deploy e screenshots
-├── .github/workflows/      # CI
-├── docker-compose.yml      # PostgreSQL local
-└── render.yaml             # Blueprint da API no Render
-```
+O PulseBoard é um projeto de portfólio. Não há empresa nem clientes reais por trás dele; o objetivo é mostrar, de ponta a ponta, como eu projeto, implemento, testo e coloco no ar um SaaS — com as mesmas preocupações de um produto real: isolamento entre tenants, autenticação segura, métricas consistentes, testes e deploy condicionado à CI.
 
-Detalhes de cada app: [`apps/api/README.md`](apps/api/README.md) e [`apps/web/README.md`](apps/web/README.md).
-
-## Portfólio vs. produto comercial
-
-O PulseBoard é um produto funcional, mas foi construído como portfólio. O que é deliberadamente de demonstração:
+O que é deliberadamente de demonstração:
 
 - as transações vêm de um gerador de dados de demo — não há ingestão de vendas reais;
 - cadastro aberto e dados de demo restauráveis;
-- hospedagem em planos gratuitos (cold start da API, banco que pausa sem uso) e um único ambiente, sem staging;
+- planos gratuitos (cold start da API, banco que pausa sem uso) e um único ambiente, sem staging;
 - interface só em pt-BR e moeda fixa em BRL.
 
-## Roadmap
+## Próximos passos
 
-O que seria necessário para operar comercialmente:
+Não implementados. Priorizados pelo que a arquitetura atual pediria primeiro para operar com tráfego real:
 
-- **Ingestão de vendas:** importação CSV, API pública e integrações com e-commerce e gateways de pagamento.
-- **Equipe:** convites, gestão de membros e papéis (o modelo de membership já existe e a UI já troca de organização).
-- **Configurações da organização:** editar nome, timezone e moeda pela interface.
-- **Contas:** recuperação de senha, verificação de e-mail e 2FA.
-- **Histórico de status das transações**, para que estornos não alterem retroativamente o período da venda original.
-- **Billing e planos.**
-- **Operação:** staging, observabilidade (erros e métricas), backups gerenciados, pré-agregação ou cache para organizações grandes.
-- **Internacionalização** e multi-moeda.
+- **Observabilidade:** hoje há logs em `stderr` e um health check; faltam rastreamento de erros, métricas de latência por endpoint e alertas.
+- **Rate limiting além da autenticação:** hoje só login e cadastro têm limite; analytics são os endpoints mais caros e ficariam atrás de um limite por usuário e organização.
+- **Staging e backups gerenciados**, para validar migrations antes de produção.
+- **Cache ou pré-agregação de analytics** para organizações grandes — o caminho indicado pelas medições, em vez de novos índices.
+- **Filas e workers** quando surgir trabalho assíncrono (importação de vendas, pré-agregação); o driver de fila em banco já está configurado, sem worker.
+- **Histórico de status das transações**, para que estornos não alterem retroativamente o período da venda original, e trilha de auditoria das alterações.
+- **Gestão de membros e autorização mais granular:** convites e papéis além de `owner` / `member` (o modelo de membership já suporta múltiplas organizações por usuário).
+- **Mais cobertura E2E** além do smoke do fluxo principal (permissões de member, troca de organização).
 
 ## Licença
 
