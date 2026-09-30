@@ -133,13 +133,21 @@ jobs:
           key: composer-${{ hashFiles('apps/api/composer.lock') }}
           restore-keys: composer-
 
-      - name: Start the API with the demo seed
+      # Throwaway per run: the seed command and Playwright both read DEMO_PASSWORD from the job env.
+      - name: Generate the demo password
+        run: |
+          password="$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
+          echo "DEMO_PASSWORD=$password" >> "$GITHUB_ENV"
+
+      - name: Start the API with the demo accounts
         working-directory: apps/api
         run: |
           composer install --no-interaction --no-progress --prefer-dist
           cp .env.example .env
           php artisan key:generate
-          php artisan migrate:fresh --seed --force
+          php artisan migrate:fresh --force
+          php artisan pulseboard:demo
           php artisan serve --host=127.0.0.1 --port=8000 > storage/logs/serve.log 2>&1 &
 
       - name: Build and serve the web app on localhost:3000

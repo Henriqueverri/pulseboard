@@ -112,14 +112,16 @@ bun run generate    # build estático em .output/public
 
 ### E2E (Playwright)
 
-O smoke faz login, abre o dashboard, cria/edita/remove um produto, abre uma transação e navega pelas abas de analytics. Ele escreve no banco, então use um banco descartável com o seed, nunca o de desenvolvimento. Com o front de produção servido em `localhost:3000` (pare o `bun run dev` antes):
+O smoke faz login com a conta owner da demo (`pulseboard:demo`), abre o dashboard, cria/edita/remove um produto, abre uma transação e navega pelas abas de analytics. Ele escreve no banco, então use um banco descartável, nunca o de desenvolvimento nem o de produção. A senha vem de `DEMO_PASSWORD`, que o `pulseboard:demo` e o Playwright leem do ambiente; use uma senha descartável (a CI gera uma por execução). `E2E_EMAIL` / `E2E_PASSWORD` sobrescrevem a conta, se precisar. Com o front de produção servido em `localhost:3000` (pare o `bun run dev` antes):
 
 ```bash
 docker exec pulseboard-postgres createdb -U pulseboard pulseboard_e2e
+export DEMO_PASSWORD="$(openssl rand -hex 24)"   # nos três terminais (ou rode tudo no mesmo shell)
 
 # terminal 1 — API no banco descartável
 cd apps/api
-DB_DATABASE=pulseboard_e2e php artisan migrate:fresh --seed --force
+DB_DATABASE=pulseboard_e2e php artisan migrate:fresh --force
+DB_DATABASE=pulseboard_e2e php artisan pulseboard:demo
 DB_DATABASE=pulseboard_e2e php artisan serve --port=8001
 
 # terminal 2 — build de produção apontando para essa API
@@ -142,7 +144,7 @@ bun run test:e2e
 |-----|--------------|
 | `api` | `composer install`, Pint, `migrate` em PostgreSQL 16 limpo, PHPUnit completo em PostgreSQL (sem os skips do SQLite) |
 | `web` | `bun install --frozen-lockfile`, lint, typecheck, Vitest, `nuxt generate` |
-| `e2e` | PostgreSQL descartável com `migrate:fresh --seed` → API (`artisan serve`) → build estático (`serve:static`) → Playwright; logs e traces como artefato em caso de falha |
+| `e2e` | PostgreSQL descartável com `migrate:fresh` + `pulseboard:demo` (`DEMO_PASSWORD` aleatória por execução, mascarada nos logs) → API (`artisan serve`) → build estático (`serve:static`) → Playwright; logs e traces como artefato em caso de falha |
 
 Deploy não roda na CI: Render (API) e a hospedagem do front fazem deploy pela integração nativa com o GitHub; o Render espera os checks da CI passarem (`autoDeployTrigger: checksPass`).
 

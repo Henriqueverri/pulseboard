@@ -31,7 +31,7 @@ Variáveis (`.env`):
 
 As URLs da API são embutidas no HTML durante o `generate`: defina as variáveis no ambiente de build.
 
-O smoke e2e usa `test@example.com` / `password`, cria e remove um produto `E2E smoke <timestamp>` e aceita `E2E_BASE_URL` para apontar para outro host. Rode-o contra um banco descartável com o seed (passo a passo no [README da raiz](../../README.md#e2e-playwright)). Usa o Chrome instalado (`channel: 'chrome'`, ou `E2E_CHANNEL`).
+O smoke e2e entra com a conta owner criada por `php artisan pulseboard:demo`: `DEMO_OWNER_EMAIL` (padrão `demo@example.com`) e `DEMO_PASSWORD`, lidos do ambiente (`E2E_EMAIL` / `E2E_PASSWORD` sobrescrevem; sem senha o teste falha logo). Cria e remove um produto `E2E smoke <timestamp>` e aceita `E2E_BASE_URL` para apontar para outro host. Rode-o contra um banco descartável com o seed (passo a passo no [README da raiz](../../README.md#e2e-playwright)). Usa o Chrome instalado (`channel: 'chrome'`, ou `E2E_CHANNEL`).
 
 Deploy (Cloudflare Pages) e requisitos de domínio: [README da raiz](../../README.md#produção).
 

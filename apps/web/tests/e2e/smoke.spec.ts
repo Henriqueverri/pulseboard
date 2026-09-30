@@ -1,6 +1,14 @@
 import { expect, test } from '@playwright/test'
 
-const OWNER = { email: process.env.E2E_EMAIL ?? 'test@example.com', password: process.env.E2E_PASSWORD ?? 'password' }
+// Demo owner created by `php artisan pulseboard:demo`, which reads the same variables.
+const OWNER = {
+  email: process.env.E2E_EMAIL || process.env.DEMO_OWNER_EMAIL || 'demo@example.com',
+  password: process.env.E2E_PASSWORD || process.env.DEMO_PASSWORD || '',
+}
+
+if (!OWNER.password) {
+  throw new Error('Set DEMO_PASSWORD (the value used by `php artisan pulseboard:demo`) or E2E_PASSWORD before running the e2e smoke.')
+}
 
 test('login → dashboard → product CRUD → transaction → analytics', async ({ page }) => {
   const productName = `E2E smoke ${Date.now()}`
