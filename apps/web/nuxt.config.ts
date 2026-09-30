@@ -38,6 +38,7 @@ export default defineNuxtConfig({
   },
   compatibilityDate: '2025-07-15',
   nitro: {
+    preset: 'cloudflare_pages',
     prerender: {
       // Cloudflare Pages only falls back to the SPA shell (200 for deep links such as
       // /products/:id) when the output has no top-level 404.html.
