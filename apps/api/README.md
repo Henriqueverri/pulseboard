@@ -26,6 +26,24 @@ vendor/bin/pint --test
 | `app/Services` | Métricas e analytics (agregações em SQL) |
 | `app/Support/Analytics` | Período, comparação, granularidade, buckets por timezone |
 | `bootstrap/app.php` | Middleware, erros em JSON para `api/*` |
-| `config/trustedproxy.php` | `TRUSTED_PROXIES` para rodar atrás do proxy do Railway |
+| `config/trustedproxy.php` | `TRUSTED_PROXIES` para rodar atrás do proxy do Render |
+| `app/Console/Commands` | `pulseboard:demo` (organização de demonstração) e `pulseboard:release` (start do container) |
+| `Dockerfile`, `docker/` | Imagem de produção: Nginx + PHP-FPM, entrypoint, configs de PHP |
 
 Health check: `GET /api/v1/health` (banco) e `GET /up` (padrão do Laravel, sem banco).
+
+## Imagem de produção
+
+```bash
+docker build -t pulseboard-api .
+docker run --rm -p 10000:10000 --env-file prod.env pulseboard-api   # prod.env fora do Git
+```
+
+Alpine com PHP 8.4-FPM (`pdo_pgsql`, OPcache sem revalidação), Nginx e dependências `--no-dev`. Roda como `www-data`; nada de `.env` na imagem, toda a configuração vem de variáveis de ambiente. O entrypoint (`docker/entrypoint.sh`):
+
+1. valida `PORT` e `APP_KEY` e garante que `storage/` e `bootstrap/cache/` são graváveis;
+2. `php artisan optimize` (cache de config, rotas, eventos e views, com as variáveis do runtime);
+3. `php artisan pulseboard:release`: `migrate --force` e `pulseboard:demo`, sob um advisory lock do PostgreSQL (dois containers subindo juntos rodam um depois do outro);
+4. sobe PHP-FPM (`127.0.0.1:9000`) e Nginx (porta `$PORT`), e encerra o container se qualquer um cair.
+
+Se algum passo falhar (por exemplo `DEMO_PASSWORD` ausente ou curta, ou banco inacessível), o container sai com erro e o Render mantém o deploy anterior no ar. Detalhes do deploy no [README da raiz](../README.md#produção).

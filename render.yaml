@@ -1,0 +1,71 @@
+# Render Blueprint: only the API. The database is Supabase PostgreSQL (no Render Postgres,
+# Redis, worker or cron) and the front is deployed separately.
+# Values marked `sync: false` are secrets: Render asks for them when the Blueprint is created
+# and never reads them from this file afterwards.
+
+services:
+  - type: web
+    name: pulseboard-api
+    runtime: docker
+    plan: free
+    # Pick the Render region closest to the Supabase project; it cannot be changed later.
+    region: virginia
+    branch: main
+    # Auto deploy after the GitHub CI checks of the commit pass (use `commit` to skip waiting).
+    autoDeployTrigger: checksPass
+    # Paths relative to the repository root.
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: ./apps/api
+    buildFilter:
+      paths:
+        - apps/api/**
+      ignoredPaths:
+        - apps/api/tests/**
+        - apps/api/**/*.md
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: APP_NAME
+        value: PulseBoard
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_KEY
+        sync: false
+      - key: APP_URL
+        value: https://api.henriqueverri.dev
+      - key: FRONTEND_URL
+        value: https://app.henriqueverri.dev
+      - key: SANCTUM_STATEFUL_DOMAINS
+        value: app.henriqueverri.dev
+      - key: SESSION_DRIVER
+        value: database
+      - key: SESSION_DOMAIN
+        value: .henriqueverri.dev
+      - key: SESSION_SECURE_COOKIE
+        value: "true"
+      - key: SESSION_SAME_SITE
+        value: lax
+      - key: CACHE_STORE
+        value: database
+      - key: QUEUE_CONNECTION
+        value: database
+      - key: DB_CONNECTION
+        value: pgsql
+      # Supabase Shared Pooler, Session mode (port 5432).
+      - key: DB_URL
+        sync: false
+      - key: DB_SSLMODE
+        value: require
+      - key: TRUSTED_PROXIES
+        value: "*"
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: LOG_LEVEL
+        value: info
+      - key: DEMO_PASSWORD
+        sync: false
+      - key: DEMO_OWNER_EMAIL
+        value: demo@example.com
+      - key: DEMO_MEMBER_EMAIL
+        value: demo-member@example.com

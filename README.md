@@ -20,9 +20,10 @@ Este repositório é um monorepo de portfólio full stack: API Laravel com auten
 pulseboard/
 ├── apps/
 │   ├── web/          # Nuxt 4
-│   └── api/          # Laravel 12
+│   └── api/          # Laravel 12 (+ Dockerfile de produção)
 ├── .github/workflows/ci.yml
-├── docker-compose.yml
+├── docker-compose.yml  # Postgres local
+├── render.yaml         # Blueprint do Render (API)
 ├── README.md
 └── .gitignore
 ```
@@ -143,7 +144,7 @@ bun run test:e2e
 | `web` | `bun install --frozen-lockfile`, lint, typecheck, Vitest, `nuxt generate` |
 | `e2e` | PostgreSQL descartável com `migrate:fresh --seed` → API (`artisan serve`) → build estático (`serve:static`) → Playwright; logs e traces como artefato em caso de falha |
 
-Deploy não roda na CI: Railway e Cloudflare Pages fazem deploy pela integração nativa com o GitHub.
+Deploy não roda na CI: Render (API) e a hospedagem do front fazem deploy pela integração nativa com o GitHub; o Render espera os checks da CI passarem (`autoDeployTrigger: checksPass`).
 
 ## Autenticação (Sanctum SPA)
 
@@ -576,50 +577,93 @@ Não commite arquivos `.env` com secrets.
 
 ## Produção
 
-Destino planejado: API no **Railway** (com PostgreSQL do Railway) e front estático no **Cloudflare Pages**, ambos com deploy pela integração do GitHub.
+```text
+Cloudflare Pages / Vercel (front estático)
+        ↓
+app.henriqueverri.dev
+        ↓  fetch com cookies (Sanctum SPA)
+api.henriqueverri.dev
+        ↓
+Render Web Service (Free, Docker: Nginx + PHP-FPM)
+        ↓  Supabase Shared Pooler, Session mode (5432), SSL
+Supabase PostgreSQL
+```
+
+O banco não fica no Render: a API usa o PostgreSQL do Supabase. Não há Redis, worker, fila nem cron.
 
 ### Requisito de domínio
 
-A autenticação é Sanctum SPA: sessão em cookie httpOnly `SameSite=Lax` e CSRF pelo cookie `XSRF-TOKEN`, que o front lê via `document.cookie` e devolve no header `X-XSRF-TOKEN`. Isso só funciona se front e API estiverem no **mesmo site** (mesmo domínio registrável), por exemplo `app.seudominio.com` e `api.seudominio.com` com `SESSION_DOMAIN=.seudominio.com`.
+A autenticação é Sanctum SPA: sessão em cookie httpOnly `SameSite=Lax` e CSRF pelo cookie `XSRF-TOKEN`, que o front lê via `document.cookie` e devolve no header `X-XSRF-TOKEN`. Isso só funciona se front e API estiverem no **mesmo site** (mesmo domínio registrável): `app.henriqueverri.dev` e `api.henriqueverri.dev` com `SESSION_DOMAIN=.henriqueverri.dev`.
 
-As URLs padrão (`*.pages.dev` e `*.up.railway.app`) são sites diferentes — os dois sufixos estão na Public Suffix List. Nelas o navegador não envia o cookie de sessão nas chamadas da API e o front não consegue ler o `XSRF-TOKEN`, então **o login não funciona sem um domínio próprio** (ou sem um proxy que coloque a API na mesma origem do front).
+As URLs padrão das plataformas (`*.onrender.com`, `*.pages.dev`, `*.vercel.app`) são sites diferentes — os sufixos estão na Public Suffix List. Nelas o navegador não envia o cookie de sessão nas chamadas da API e o front não consegue ler o `XSRF-TOKEN`, então **o login não funciona sem o domínio próprio** (a URL `*.onrender.com` serve só para conferir o health check).
 
-### API no Railway
+### API no Render
 
-Serviço a partir deste repositório, com **Root Directory** `apps/api`. O builder padrão (Railpack) detecta o Laravel, instala PHP 8.4 e `pdo_pgsql` a partir do `composer.json`, e a cada start roda `storage:link` e `optimize` (cache de config, rotas, eventos e views) antes de subir o FrankenPHP. Por padrão ele também roda `migrate --force` a cada start; com `RAILPACK_SKIP_MIGRATIONS=true` as migrations passam para o pre-deploy (uma vez por deploy, antes de o tráfego mudar).
+Web Service **Free** com runtime **Docker**, definido em [`render.yaml`](render.yaml) (Blueprint):
 
-Configurações do serviço:
+| Configuração | Valor |
+|--------------|-------|
+| Dockerfile | `./apps/api/Dockerfile` (caminho relativo à raiz do repositório) |
+| Docker build context | `./apps/api` |
+| Branch / auto deploy | `main`, deploy automático quando os checks da CI passam (`autoDeployTrigger: checksPass`) |
+| Build filter | `apps/api/**` (mudanças só no front não redeployam a API; testes e `.md` ignorados) |
+| Health check | `/api/v1/health` (200 com `{"status":"ok","database":"ok"}`, 503 se o banco não responde) |
+| Domínio | `api.henriqueverri.dev` (custom domain, HTTPS automático) |
 
-- Pre-deploy command: `php artisan migrate --force && php artisan pulseboard:demo` (migrations + conta de demonstração; ver abaixo).
-- Healthcheck path: `/api/v1/health` (200 com `{"status":"ok","database":"ok"}`, 503 se o banco não responde; não expõe versões nem erros).
-- Watch paths: `/apps/api/**` (evita redeploy da API em mudanças só do front).
-- Domínio: `api.seudominio.com` (custom domain do Railway, HTTPS automático).
+Sem usar o Blueprint, os mesmos valores vão no Dashboard: *New → Web Service*, runtime Docker, deixe **Root Directory vazio** e preencha *Dockerfile Path* `./apps/api/Dockerfile` e *Docker Build Context Directory* `./apps/api`; em *Build Filters*, inclua `apps/api/**`.
 
-Variáveis:
+O Render Free não tem Pre-Deploy Command nem Shell, então migrations e demo rodam no start do container ([`apps/api/docker/entrypoint.sh`](apps/api/docker/entrypoint.sh)):
+
+1. `php artisan optimize` — cache de config, rotas, eventos e views, gerado no runtime (as variáveis não existem no build);
+2. `php artisan pulseboard:release` — `migrate --force` e depois `pulseboard:demo`, segurando um advisory lock do PostgreSQL: se dois containers sobem ao mesmo tempo (restart durante um deploy), o segundo espera e encontra tudo pronto;
+3. PHP-FPM + Nginx na porta `$PORT` (o Render define; padrão 10000).
+
+Qualquer falha nesses passos (banco inacessível, migration quebrada, `DEMO_PASSWORD` ausente ou curta) derruba o container antes de ele aceitar tráfego; num deploy, o Render mantém a versão anterior no ar. O Free hiberna o serviço após ~15 min sem requisições: o primeiro acesso depois disso espera o container subir de novo (e repetir os passos acima, que são idempotentes).
+
+### Banco no Supabase
+
+Use a connection string do **Shared Pooler em Session mode** (*Connect → Session pooler* no painel do Supabase), porta **5432**:
+
+```text
+postgresql://postgres.<project-ref>:<senha-url-encoded>@aws-0-<região>.pooler.supabase.com:5432/postgres
+```
+
+- **Não** use a conexão direta (`db.<ref>.supabase.co`): ela é só IPv6 e o Render não tem saída IPv6.
+- **Não** use o Transaction mode (porta 6543): o PDO usa prepared statements no servidor e o `pulseboard:release` usa advisory lock de sessão; os dois exigem Session mode.
+- Caracteres especiais da senha precisam de URL-encoding (`@` → `%40`, `:` → `%3A`, `/` → `%2F`).
+- `DB_SSLMODE=require` força TLS na conexão.
+- O pool do Shared Pooler é pequeno; o PHP-FPM usa no máximo 5 workers (uma conexão cada).
+- No plano Free do Supabase o projeto pausa após alguns dias sem atividade; com o banco pausado o health check responde 503 e o deploy falha até reativá-lo no painel.
+
+### Variáveis de produção
+
+Nenhum valor real vai para o Git. No `render.yaml`, os secrets (`APP_KEY`, `DB_URL`, `DEMO_PASSWORD`) usam `sync: false`: o Render pede os valores ao criar o Blueprint.
 
 | Variável | Valor |
 |----------|-------|
 | `APP_NAME` | `PulseBoard` |
 | `APP_ENV` | `production` |
 | `APP_DEBUG` | `false` |
-| `APP_KEY` | gerar localmente com `php artisan key:generate --show` |
-| `APP_URL` | `https://api.seudominio.com` |
-| `FRONTEND_URL` | `https://app.seudominio.com` (origem exata liberada no CORS) |
-| `SANCTUM_STATEFUL_DOMAINS` | `app.seudominio.com` (host do front, sem esquema) |
-| `SESSION_DOMAIN` | `.seudominio.com` |
+| `APP_KEY` | secret — gerar localmente com `php artisan key:generate --show` |
+| `APP_URL` | `https://api.henriqueverri.dev` |
+| `FRONTEND_URL` | `https://app.henriqueverri.dev` (origem exata liberada no CORS) |
+| `SANCTUM_STATEFUL_DOMAINS` | `app.henriqueverri.dev` (host do front, sem esquema) |
+| `SESSION_DRIVER` | `database` |
+| `SESSION_DOMAIN` | `.henriqueverri.dev` |
 | `SESSION_SECURE_COOKIE` | `true` |
 | `SESSION_SAME_SITE` | `lax` |
-| `SESSION_DRIVER` / `CACHE_STORE` | `database` (tabelas criadas pelas migrations; sem Redis) |
-| `TRUSTED_PROXIES` | `*` (a API só é acessível pelo proxy do Railway; sem isso o rate limit de login trata todos os usuários como o mesmo IP) |
+| `CACHE_STORE` | `database` (tabelas criadas pelas migrations; sem Redis) |
+| `QUEUE_CONNECTION` | `database` (nenhum job é despachado; sem worker) |
 | `DB_CONNECTION` | `pgsql` |
-| `DB_URL` | `${{Postgres.DATABASE_URL}}` (referência ao serviço PostgreSQL do Railway) |
-| `LOG_CHANNEL` | `stderr` (logs aparecem no painel do Railway) |
+| `DB_URL` | secret — `<SUPABASE_SESSION_POOLER_URL>` (ver acima) |
+| `DB_SSLMODE` | `require` |
+| `TRUSTED_PROXIES` | `*` (a API só é acessível pelo proxy do Render; sem isso as requisições parecem HTTP e o rate limit de login trata todos os usuários como o mesmo IP) |
+| `LOG_CHANNEL` | `stderr` (logs aparecem no painel do Render) |
 | `LOG_LEVEL` | `info` |
-| `RAILPACK_SKIP_MIGRATIONS` | `true` (migrations no pre-deploy) |
-| `DEMO_PASSWORD` | senha das contas de demonstração (mínimo 12 caracteres; é a senha que você divulga no portfólio) |
-| `DEMO_OWNER_EMAIL` / `DEMO_MEMBER_EMAIL` | opcionais; padrão `demo@example.com` e `demo-member@example.com` |
+| `DEMO_PASSWORD` | secret — senha das contas de demonstração (mínimo 12 caracteres; é a senha que você divulga no portfólio) |
+| `DEMO_OWNER_EMAIL` / `DEMO_MEMBER_EMAIL` | `demo@example.com` / `demo-member@example.com` (padrão) |
 
-Não há filas, jobs, e-mails nem storage de arquivos em uso: não é preciso worker, Redis ou volume.
+`PORT` é definida pelo próprio Render. Não há filas, jobs, e-mails nem storage de arquivos em uso: não é preciso worker, Redis ou volume.
 
 ### Dados de demonstração
 
@@ -630,7 +674,15 @@ Não há filas, jobs, e-mails nem storage de arquivos em uso: não é preciso wo
 - `--refresh` apaga produtos, clientes e transações **somente da organização de demo** (inclusive o que visitantes criaram) e gera o histórico de novo, terminando no dia atual;
 - recusa rodar se um dos e-mails de demo pertence a uma conta de outra organização, ou se o slug pertence a uma organização que não é da conta demo owner.
 
-O histórico é relativo à data do seed: com o período padrão de 30 dias, o dashboard esvazia cerca de um mês depois. Rode `php artisan pulseboard:demo --refresh` periodicamente (manualmente no serviço, ou num serviço de cron do Railway com esse comando como start command).
+Em produção ele roda a cada start do container (via `pulseboard:release`), sem `--refresh`.
+
+O histórico é relativo à data do seed: com o período padrão de 30 dias, o dashboard esvazia cerca de um mês depois. O Render Free não tem Shell nem cron, então rode o refresh periodicamente da sua máquina, apontando para o Supabase (variáveis só no terminal, nunca num arquivo versionado):
+
+```bash
+cd apps/api
+DB_URL='<SUPABASE_SESSION_POOLER_URL>' DB_SSLMODE=require DEMO_PASSWORD='<senha da demo>' \
+  php artisan pulseboard:demo --refresh
+```
 
 O `DatabaseSeeder` (`migrate:fresh --seed`) continua sendo só para desenvolvimento: usa factories e cria `test@example.com` / `password`.
 
@@ -643,26 +695,28 @@ Projeto conectado ao repositório:
 | Root directory | `apps/web` |
 | Build command | `bun install --frozen-lockfile && bun run generate` |
 | Build output directory | `dist` |
-| Variáveis de build | `NUXT_PUBLIC_API_URL=https://api.seudominio.com/api/v1`, `NUXT_PUBLIC_API_ORIGIN=https://api.seudominio.com`, `BUN_VERSION=1.3.10` |
-| Domínio | `app.seudominio.com` |
+| Variáveis de build | `NUXT_PUBLIC_API_URL=https://api.henriqueverri.dev/api/v1`, `NUXT_PUBLIC_API_ORIGIN=https://api.henriqueverri.dev`, `BUN_VERSION=1.3.10` |
+| Domínio | `app.henriqueverri.dev` |
 
 No Pages (`CF_PAGES`), o Nitro usa o preset `cloudflare-pages-static`: gera `dist/`, headers de cache imutável para `/_nuxt/*` e mescla o `public/_headers` (anti-clickjacking). As URLs da API são embutidas no HTML durante o build; se as duas variáveis faltarem, o build falha de propósito. Não há `404.html`, então o Pages usa o fallback de SPA e rotas como `/products/:id` abrem direto.
 
 ### Checklist do primeiro deploy
 
-1. Domínio próprio com dois subdomínios (front e API).
-2. Railway: PostgreSQL + serviço da API com as variáveis acima e o custom domain.
-3. Conferir `https://api.seudominio.com/api/v1/health` e, nos logs do pre-deploy, a linha "Demo organization seeded".
-4. Cloudflare Pages com as variáveis de build e o custom domain.
-5. Login no front com `DEMO_OWNER_EMAIL` / `DEMO_PASSWORD`, criar/editar/remover um produto e navegar pelo analytics.
+1. Domínio `henriqueverri.dev` com os subdomínios `app` (front) e `api` (API).
+2. Supabase: copiar a connection string do Session pooler (porta 5432).
+3. Render: *New → Blueprint* apontando para este repositório (lê o `render.yaml`) e preencher `APP_KEY`, `DB_URL` e `DEMO_PASSWORD`.
+4. Nos logs do primeiro deploy, conferir as migrations e a linha "Demo organization seeded"; depois `https://<serviço>.onrender.com/api/v1/health`.
+5. Custom domain `api.henriqueverri.dev` no Render (CNAME no DNS) e conferir `https://api.henriqueverri.dev/api/v1/health`.
+6. Front (Cloudflare Pages ou Vercel) com as variáveis de build e o custom domain `app.henriqueverri.dev`.
+7. Login no front com `DEMO_OWNER_EMAIL` / `DEMO_PASSWORD`, criar/editar/remover um produto e navegar pelo analytics.
 
 ## Limitações conhecidas
 
 - Sem domínio próprio compartilhado entre front e API, a autenticação não funciona em produção (ver acima). Previews do Pages (`<hash>.<projeto>.pages.dev`) também não autenticam: não estão no CORS nem no `SANCTUM_STATEFUL_DOMAINS`.
 - Um único ambiente de produção; sem staging.
 - A conta demo owner pode alterar os dados da demo (é o objetivo); `--refresh` restaura o estado original.
-- Railpack instala as dependências de desenvolvimento do Composer (não usa `--no-dev`); o runtime não depende delas.
-- Sem monitoramento de erros externo: os logs são o `stderr` do Railway.
+- Render Free: o serviço hiberna sem tráfego (primeiro acesso lento) e cada start roda `optimize` + migrations + demo antes de aceitar requisições.
+- Sem monitoramento de erros externo: os logs são o `stderr` do container, no painel do Render.
 - Suíte PHPUnit local em SQLite por padrão; a paridade com PostgreSQL é garantida na CI.
 
 ## Status do projeto
@@ -674,4 +728,5 @@ No Pages (`CF_PAGES`), o Nitro usa o preset `cloudflare-pages-static`: gera `dis
 - [x] Frontend (F1–F10): auth, shell, CRUDs, transações, dashboard, analytics, acessibilidade e smoke E2E  
 - [x] CI (GitHub Actions: API em PostgreSQL, web, E2E)  
 - [x] Produção preparada (F11): configuração e documentação de deploy  
-- [ ] Deploy real (depende do domínio e das contas Railway/Cloudflare)  
+- [x] Imagem Docker da API e Blueprint do Render (Render Free + Supabase)  
+- [ ] Deploy real (depende do domínio e das contas Render/Supabase/front)  

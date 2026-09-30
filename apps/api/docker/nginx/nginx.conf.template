@@ -1,0 +1,77 @@
+# Rendered by the entrypoint: __PORT__ becomes $PORT (set by Render).
+# Runs as www-data, so every writable path lives under /tmp/nginx.
+
+worker_processes 1;
+pid /tmp/nginx/nginx.pid;
+error_log /dev/stderr warn;
+
+events {
+    worker_connections 512;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    client_body_temp_path /tmp/nginx/client_body;
+    fastcgi_temp_path /tmp/nginx/fastcgi;
+    proxy_temp_path /tmp/nginx/proxy;
+    uwsgi_temp_path /tmp/nginx/uwsgi;
+    scgi_temp_path /tmp/nginx/scgi;
+
+    # Render's proxy terminates HTTPS; the client IP arrives in X-Forwarded-For.
+    log_format main '$http_x_forwarded_for - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent $request_time "$http_user_agent"';
+
+    # Render polls the health check every few seconds.
+    map $request_uri $loggable {
+        ~^/api/v1/health 0;
+        default 1;
+    }
+
+    access_log /dev/stdout main if=$loggable;
+
+    sendfile on;
+    keepalive_timeout 65;
+    server_tokens off;
+    client_max_body_size 2m;
+
+    gzip on;
+    gzip_types application/json text/plain;
+
+    server {
+        listen __PORT__ default_server;
+        server_name _;
+
+        root /var/www/html/public;
+        index index.php;
+        charset utf-8;
+
+        # Redirects must not leak the internal port.
+        absolute_redirect off;
+
+        location / {
+            try_files $uri $uri/ /index.php?$query_string;
+        }
+
+        location = /favicon.ico { access_log off; log_not_found off; }
+        location = /robots.txt  { access_log off; log_not_found off; }
+
+        location ~ ^/index\.php(/|$) {
+            fastcgi_pass 127.0.0.1:9000;
+            fastcgi_split_path_info ^(.+\.php)(/.*)$;
+            include /etc/nginx/fastcgi_params;
+            fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+            fastcgi_param DOCUMENT_ROOT $realpath_root;
+            fastcgi_hide_header X-Powered-By;
+        }
+
+        location ~ \.php$ {
+            return 404;
+        }
+
+        location ~ /\.(?!well-known).* {
+            deny all;
+        }
+    }
+}
