@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-const OWNER = { email: process.env.E2E_EMAIL ?? 'demo@example.com', password: process.env.E2E_PASSWORD ?? 'PulseBoardDemo2026!' }
+const OWNER = { email: process.env.E2E_EMAIL ?? 'test@example.com', password: process.env.E2E_PASSWORD ?? 'password' }
 
 test('login → dashboard → product CRUD → transaction → analytics', async ({ page }) => {
   const productName = `E2E smoke ${Date.now()}`
