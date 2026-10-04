@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Console\Commands\DemoCommand;
 use Database\Factories\OrganizationFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -78,6 +79,14 @@ class Organization extends Model
     public function apiKeys(): HasMany
     {
         return $this->hasMany(ApiKey::class);
+    }
+
+    /**
+     * The public demo organization created by pulseboard:demo.
+     */
+    public function isDemo(): bool
+    {
+        return $this->slug === DemoCommand::ORGANIZATION_SLUG;
     }
 
     public static function uniqueSlugFrom(string $name): string

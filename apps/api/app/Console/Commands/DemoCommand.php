@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\ApiKey;
 use App\Models\Customer;
 use App\Models\Organization;
 use App\Models\Product;
@@ -18,7 +19,8 @@ use Illuminate\Support\Facades\DB;
  * the demo passwords are synced with DEMO_PASSWORD, missing demo external ids are filled in
  * (a demo seeded before they existed) and the sales history is extended up to
  * today (only days after the latest sale are added). --refresh rebuilds the demo
- * organization's catalog and ~6-month history so it ends today again.
+ * organization's catalog and ~6-month history so it ends today again, and removes
+ * the API keys visitors created. The command itself never creates API keys.
  */
 class DemoCommand extends Command
 {
@@ -29,7 +31,7 @@ class DemoCommand extends Command
     private const MIN_PASSWORD_LENGTH = 12;
 
     protected $signature = 'pulseboard:demo
-        {--refresh : Delete the demo organization\'s products, customers and transactions and seed them again}';
+        {--refresh : Delete the demo organization\'s API keys, products, customers and transactions and seed them again}';
 
     protected $description = 'Create or refresh the public demo organization and its owner/member accounts';
 
@@ -149,6 +151,9 @@ class DemoCommand extends Command
 
     private function wipe(Organization $organization): void
     {
+        // Keys created by visitors go with the data they ingested.
+        ApiKey::query()->forOrganization($organization)->delete();
+
         // Items cascade from transactions; they restrict product deletion, hence the order.
         Transaction::query()->forOrganization($organization)->delete();
         Customer::withTrashed()->forOrganization($organization)->forceDelete();

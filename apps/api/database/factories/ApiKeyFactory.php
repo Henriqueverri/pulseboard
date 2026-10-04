@@ -28,4 +28,14 @@ class ApiKeyFactory extends Factory
             'secret_hash' => hash('sha256', Str::random(40)),
         ];
     }
+
+    public function revoked(): static
+    {
+        return $this->state(fn () => ['revoked_at' => now()->subMinute()]);
+    }
+
+    public function expired(): static
+    {
+        return $this->state(fn () => ['expires_at' => now()->subMinute()]);
+    }
 }

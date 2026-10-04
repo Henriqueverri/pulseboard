@@ -269,6 +269,21 @@ class DemoCommandTest extends TestCase
         $this->assertSame(0, ApiKey::query()->count());
     }
 
+    public function test_refresh_removes_the_demo_keys_but_a_plain_rerun_keeps_them(): void
+    {
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+        $demo = Organization::query()->sole();
+        $visitorKey = ApiKey::factory()->for($demo)->create();
+        $otherKey = ApiKey::factory()->for(Organization::factory())->create();
+
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+        $this->assertModelExists($visitorKey);
+
+        $this->artisan('pulseboard:demo', ['--refresh' => true])->assertSuccessful();
+        $this->assertModelMissing($visitorKey);
+        $this->assertModelExists($otherKey);
+    }
+
     public function test_extended_and_refreshed_sales_keep_source_and_status_history(): void
     {
         $this->artisan('pulseboard:demo')->assertSuccessful();
