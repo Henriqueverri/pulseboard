@@ -15,7 +15,8 @@ use Illuminate\Support\Facades\DB;
  * Creates (or refreshes) the public demo organization without touching any other data.
  *
  * Safe to run on every container start: without --refresh an existing demo keeps its data,
- * the demo passwords are synced with DEMO_PASSWORD and the sales history is extended up to
+ * the demo passwords are synced with DEMO_PASSWORD, missing demo external ids are filled in
+ * (a demo seeded before they existed) and the sales history is extended up to
  * today (only days after the latest sale are added). --refresh rebuilds the demo
  * organization's catalog and ~6-month history so it ends today again.
  */
@@ -55,11 +56,16 @@ class DemoCommand extends Command
         }
 
         if ($organization !== null && ! $this->option('refresh')) {
-            $added = DB::transaction(function () use ($organization, $accounts, $password): int {
+            [$filled, $added] = DB::transaction(function () use ($organization, $accounts, $password): array {
                 $this->syncAccounts($organization, $accounts, $password);
+                $seeder = new DemoDataSeeder;
 
-                return (new DemoDataSeeder)->extend($organization);
+                return [$seeder->backfillExternalIds($organization), $seeder->extend($organization)];
             });
+
+            if ($filled > 0) {
+                $this->info("Filled the missing external ids of {$filled} demo products and customers.");
+            }
 
             $this->info($added > 0
                 ? "Demo organization already exists; passwords synced and {$added} transactions added up to today."

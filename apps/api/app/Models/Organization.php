@@ -72,6 +72,14 @@ class Organization extends Model
         return $this->hasMany(Transaction::class);
     }
 
+    /**
+     * @return HasMany<ApiKey, $this>
+     */
+    public function apiKeys(): HasMany
+    {
+        return $this->hasMany(ApiKey::class);
+    }
+
     public static function uniqueSlugFrom(string $name): string
     {
         $base = Str::slug($name) ?: 'organization';

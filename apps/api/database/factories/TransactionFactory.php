@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\TransactionSource;
 use App\Enums\TransactionStatus;
 use App\Models\Customer;
 use App\Models\Organization;
@@ -28,6 +29,7 @@ class TransactionFactory extends Factory
                 'organization_id' => $attributes['organization_id'],
             ])->id,
             'status' => TransactionStatus::Paid,
+            'source' => TransactionSource::Seed,
             'occurred_at' => fake()->dateTimeBetween('-90 days', 'now'),
         ];
     }
@@ -35,6 +37,7 @@ class TransactionFactory extends Factory
     /**
      * A transaction without items would have a meaningless total, so items are
      * created from the same organization's catalog unless provided via has().
+     * The status history is the path from creation to the transaction's status.
      */
     public function configure(): static
     {
@@ -45,12 +48,33 @@ class TransactionFactory extends Factory
 
             // Items update the total through their own copy of the transaction.
             $transaction->recalculateTotal();
+
+            if (! $transaction->statusChanges()->exists()) {
+                $this->createStatusHistoryFor($transaction);
+            }
         });
     }
 
     public function status(TransactionStatus $status): static
     {
         return $this->state(fn () => ['status' => $status]);
+    }
+
+    private function createStatusHistoryFor(Transaction $transaction): void
+    {
+        $from = null;
+
+        foreach ($transaction->status->pathFromCreation() as $to) {
+            $transaction->statusChanges()->create([
+                'organization_id' => $transaction->organization_id,
+                'from_status' => $from,
+                'to_status' => $to,
+                'occurred_at' => $transaction->occurred_at,
+                'source' => $transaction->source,
+            ]);
+
+            $from = $to;
+        }
     }
 
     private function createItemsFor(Transaction $transaction): void

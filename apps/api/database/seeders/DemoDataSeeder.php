@@ -3,12 +3,14 @@
 namespace Database\Seeders;
 
 use App\Enums\ProductStatus;
+use App\Enums\TransactionSource;
 use App\Enums\TransactionStatus;
 use App\Models\Customer;
 use App\Models\Organization;
 use App\Models\Product;
 use App\Models\Transaction;
 use App\Models\TransactionItem;
+use App\Models\TransactionStatusChange;
 use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Closure;
@@ -27,7 +29,11 @@ use Illuminate\Support\Str;
  * - products and customers follow long-tail popularity (top sellers, VIP buyers);
  * - some products were deactivated 30 days ago and only appear in older sales;
  * - some prices rose 45 days ago, so older items keep the old unit_price snapshot;
- * - most transactions are paid, recent ones may be pending, a few are refunded/canceled.
+ * - most transactions are paid, recent ones may be pending, a few are refunded/canceled;
+ * - every transaction has source=seed and the status history that leads to its status;
+ * - catalog and customers carry stable external ids (demo-prd-001-ESS, demo-cus-001).
+ *
+ * No API key is ever created here: the demo never ships a ready-made credential.
  *
  * extend() later appends the days between the latest sale and today, so the default
  * dashboard period keeps showing data long after the full seed.
@@ -41,6 +47,10 @@ class DemoDataSeeder extends Seeder
     public const HISTORY_DAYS = 180;
 
     public const CATALOG_SKU_PREFIX = 'PB-';
+
+    public const PRODUCT_EXTERNAL_ID_PREFIX = 'demo-prd-';
+
+    public const CUSTOMER_EXTERNAL_ID_PREFIX = 'demo-cus-';
 
     private const RANDOM_SEED = 20260928;
 
@@ -68,11 +78,22 @@ class DemoDataSeeder extends Seeder
 
     private const INSERT_CHUNK = 500;
 
+    private const CUSTOMER_TIERS = [
+        ['count' => 8, 'weight' => 12.0],
+        ['count' => 22, 'weight' => 4.0],
+        ['count' => 40, 'weight' => 1.0],
+    ];
+
+    private const PRODUCT_VARIANT_CODES = ['ESS', 'PRO'];
+
     /** @var list<array<string, mixed>> */
     private array $transactionRows = [];
 
     /** @var list<array<string, mixed>> */
     private array $itemRows = [];
+
+    /** @var list<array<string, mixed>> */
+    private array $statusChangeRows = [];
 
     public function run(Organization $organization): void
     {
@@ -158,6 +179,119 @@ class DemoDataSeeder extends Seeder
     }
 
     /**
+     * Gives a demo seeded before external ids existed the same ids a fresh seed would assign, and
+     * returns how many records were updated. Each id is derived from what the seed itself wrote:
+     * the catalog SKU (PB-001-ESS -> demo-prd-001-ESS) and the customer email
+     * (ana.lima.05@example.com -> demo-cus-005, names from the seed lists only).
+     *
+     * Safe to run on every start: only records without an external id are touched, an id already
+     * in use is never assigned again, and when two records map to the same id the oldest wins
+     * (seeded customers predate any visitor's). Nothing else changes, not even updated_at.
+     */
+    public function backfillExternalIds(Organization $organization): int
+    {
+        $products = Product::withTrashed()
+            ->forOrganization($organization)
+            ->whereNull('external_id')
+            ->where('sku', 'like', self::CATALOG_SKU_PREFIX.'%')
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get(['id', 'sku'])
+            ->map(fn (Product $product) => ['id' => $product->id, 'external_id' => self::seededProductExternalId((string) $product->sku)]);
+
+        $customers = Customer::withTrashed()
+            ->forOrganization($organization)
+            ->whereNull('external_id')
+            ->where('email', 'like', '%@example.com')
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get(['id', 'email'])
+            ->map(fn (Customer $customer) => ['id' => $customer->id, 'external_id' => self::seededCustomerExternalId($customer->email)]);
+
+        return $this->assignExternalIds($organization, Product::class, $products)
+            + $this->assignExternalIds($organization, Customer::class, $customers);
+    }
+
+    public static function productExternalId(int $catalogNumber, string $variantCode): string
+    {
+        return sprintf('%s%03d-%s', self::PRODUCT_EXTERNAL_ID_PREFIX, $catalogNumber, $variantCode);
+    }
+
+    public static function customerExternalId(int $number): string
+    {
+        return sprintf('%s%03d', self::CUSTOMER_EXTERNAL_ID_PREFIX, $number);
+    }
+
+    /**
+     * The external id of a product with a demo catalog SKU, or null for any other SKU.
+     */
+    private static function seededProductExternalId(string $sku): ?string
+    {
+        $pattern = sprintf(
+            '/^%s(\d{3})-(%s)$/',
+            preg_quote(self::CATALOG_SKU_PREFIX, '/'),
+            implode('|', self::PRODUCT_VARIANT_CODES),
+        );
+
+        if (preg_match($pattern, $sku, $match) !== 1) {
+            return null;
+        }
+
+        $catalogNumber = (int) $match[1];
+
+        return $catalogNumber >= 1 && $catalogNumber <= count(ProductFactory::CATALOG)
+            ? self::productExternalId($catalogNumber, $match[2])
+            : null;
+    }
+
+    /**
+     * The external id of a customer with an email the seed generates, or null for any other email.
+     */
+    private static function seededCustomerExternalId(string $email): ?string
+    {
+        if (preg_match('/^([a-z0-9-]+)\.([a-z0-9-]+)\.(\d{2,3})@example\.com$/', $email, $match) !== 1) {
+            return null;
+        }
+
+        $number = (int) $match[3];
+        $isSeededName = in_array($match[1], array_map(Str::slug(...), self::FIRST_NAMES), true)
+            && in_array($match[2], array_map(Str::slug(...), self::LAST_NAMES), true);
+
+        return $isSeededName && $number >= 1 && $number <= array_sum(array_column(self::CUSTOMER_TIERS, 'count'))
+            ? self::customerExternalId($number)
+            : null;
+    }
+
+    /**
+     * @param  class-string<Product|Customer>  $model
+     * @param  Collection<int, array{id: string, external_id: string|null}>  $candidates  in order of preference
+     */
+    private function assignExternalIds(Organization $organization, string $model, Collection $candidates): int
+    {
+        $candidates = $candidates->whereNotNull('external_id');
+
+        if ($candidates->isEmpty()) {
+            return 0;
+        }
+
+        $taken = $model::withTrashed()
+            ->forOrganization($organization)
+            ->whereIn('external_id', $candidates->pluck('external_id')->unique()->values())
+            ->pluck('external_id')
+            ->flip();
+
+        $assignments = $candidates
+            ->reject(fn (array $candidate) => $taken->has($candidate['external_id']))
+            ->unique('external_id');
+
+        foreach ($assignments as $candidate) {
+            $model::withTrashed()->whereKey($candidate['id'])->toBase()->update(['external_id' => $candidate['external_id']]);
+        }
+
+        return $assignments->count();
+    }
+
+    /**
      * @return Collection<int, array{model: Product, weight: float, raised: bool}>
      */
     private function seedProducts(Organization $organization, CarbonImmutable $today): Collection
@@ -172,12 +306,14 @@ class DemoDataSeeder extends Seeder
             foreach (['Essential' => $min, 'Pro' => ($min + $max) / 2] as $variant => $price) {
                 $position = $products->count();
                 $inactive = in_array($position, [7, 15, 26, 33], true);
+                $variantCode = strtoupper(substr($variant, 0, 3));
 
                 $product = new Product;
                 $product->forceFill([
                     'organization_id' => $organization->id,
                     'name' => "{$name} {$variant}",
-                    'sku' => sprintf('%s%03d-%s', self::CATALOG_SKU_PREFIX, $index + 1, strtoupper(substr($variant, 0, 3))),
+                    'sku' => sprintf('%s%03d-%s', self::CATALOG_SKU_PREFIX, $index + 1, $variantCode),
+                    'external_id' => self::productExternalId($index + 1, $variantCode),
                     'price' => $this->retailPrice($price),
                     'status' => $inactive ? ProductStatus::Inactive : ProductStatus::Active,
                     'created_at' => $createdAt,
@@ -200,15 +336,9 @@ class DemoDataSeeder extends Seeder
      */
     private function seedCustomers(Organization $organization, CarbonImmutable $today): Collection
     {
-        $tiers = [
-            ['count' => 8, 'weight' => 12.0],
-            ['count' => 22, 'weight' => 4.0],
-            ['count' => 40, 'weight' => 1.0],
-        ];
-
         $customers = collect();
 
-        foreach ($tiers as $tier) {
+        foreach (self::CUSTOMER_TIERS as $tier) {
             for ($i = 0; $i < $tier['count']; $i++) {
                 $createdAt = $today->subDays(mt_rand(self::HISTORY_DAYS + 5, self::HISTORY_DAYS + 200))->utc();
                 $first = self::FIRST_NAMES[mt_rand(0, count(self::FIRST_NAMES) - 1)];
@@ -219,6 +349,7 @@ class DemoDataSeeder extends Seeder
                     'organization_id' => $organization->id,
                     'name' => "{$first} {$last}",
                     'email' => sprintf('%s.%s.%02d@example.com', Str::slug($first), Str::slug($last), $customers->count() + 1),
+                    'external_id' => self::customerExternalId($customers->count() + 1),
                     'created_at' => $createdAt,
                     'updated_at' => $createdAt,
                 ])->save();
@@ -317,11 +448,30 @@ class DemoDataSeeder extends Seeder
             'organization_id' => $organization->id,
             'customer_id' => $customer->id,
             'status' => $status->value,
+            'source' => TransactionSource::Seed->value,
             'total_amount' => Money::fromCents($totalCents),
             'occurred_at' => $timestamp,
             'created_at' => $timestamp,
             'updated_at' => $timestamp,
         ];
+
+        // The real date of a refund or cancellation is not modeled: every change happens at occurred_at.
+        $from = null;
+
+        foreach ($status->pathFromCreation() as $to) {
+            $this->statusChangeRows[] = [
+                'id' => (new TransactionStatusChange)->newUniqueId(),
+                'organization_id' => $organization->id,
+                'transaction_id' => $transactionId,
+                'from_status' => $from?->value,
+                'to_status' => $to->value,
+                'occurred_at' => $timestamp,
+                'source' => TransactionSource::Seed->value,
+                'created_at' => $timestamp,
+            ];
+
+            $from = $to;
+        }
     }
 
     private function flush(): void
@@ -334,8 +484,13 @@ class DemoDataSeeder extends Seeder
             TransactionItem::query()->insert($rows);
         }
 
+        foreach (array_chunk($this->statusChangeRows, self::INSERT_CHUNK) as $rows) {
+            TransactionStatusChange::query()->insert($rows);
+        }
+
         $this->transactionRows = [];
         $this->itemRows = [];
+        $this->statusChangeRows = [];
     }
 
     /**

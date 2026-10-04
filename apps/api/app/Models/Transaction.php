@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\TransactionSource;
 use App\Enums\TransactionStatus;
 use App\Exceptions\CrossOrganizationReferenceException;
 use App\Models\Concerns\BelongsToOrganization;
@@ -40,6 +41,7 @@ class Transaction extends Model
     {
         return [
             'status' => TransactionStatus::class,
+            'source' => TransactionSource::class,
             'total_amount' => 'decimal:2',
             'occurred_at' => 'datetime',
         ];
@@ -74,6 +76,27 @@ class Transaction extends Model
     public function items(): HasMany
     {
         return $this->hasMany(TransactionItem::class);
+    }
+
+    /**
+     * status is the denormalized current status: it always equals the to_status
+     * of the last change in this history.
+     *
+     * @return HasMany<TransactionStatusChange, $this>
+     */
+    public function statusChanges(): HasMany
+    {
+        return $this->hasMany(TransactionStatusChange::class);
+    }
+
+    /**
+     * The API key that ingested this transaction (null for seeded transactions).
+     *
+     * @return BelongsTo<ApiKey, $this>
+     */
+    public function apiKey(): BelongsTo
+    {
+        return $this->belongsTo(ApiKey::class);
     }
 
     /**

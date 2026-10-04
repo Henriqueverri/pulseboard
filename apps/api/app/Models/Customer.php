@@ -23,6 +23,7 @@ class Customer extends Model
         'organization_id',
         'name',
         'email',
+        'external_id',
     ];
 
     /**

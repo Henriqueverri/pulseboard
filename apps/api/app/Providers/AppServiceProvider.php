@@ -12,6 +12,7 @@ use App\Policies\ProductPolicy;
 use App\Policies\TransactionPolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Sanctum\Sanctum;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -32,5 +33,9 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Product::class, ProductPolicy::class);
         Gate::policy(Customer::class, CustomerPolicy::class);
         Gate::policy(Transaction::class, TransactionPolicy::class);
+
+        // SPA-only authentication: there are no personal access tokens, so a bearer
+        // token on an internal route must never be looked up (it would be a 500).
+        Sanctum::getAccessTokenFromRequestUsing(fn () => null);
     }
 }
