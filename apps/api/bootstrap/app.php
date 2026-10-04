@@ -1,5 +1,6 @@
 <?php
 
+use App\Exceptions\IngestionException;
 use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\AuthenticateApiKey;
 use App\Http\Middleware\EnsureOrganizationContext;
@@ -48,6 +49,19 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request): bool => $request->is('api/*') || $request->expectsJson(),
         );
+
+        $exceptions->render(function (IngestionException $exception, Request $request) {
+            $body = [
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+            ];
+
+            if ($exception->errors !== []) {
+                $body['errors'] = $exception->errors;
+            }
+
+            return response()->json($body, $exception->httpStatus);
+        });
 
         // The default message names the Eloquent model class.
         $exceptions->render(function (NotFoundHttpException $exception, Request $request) {

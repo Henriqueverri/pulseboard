@@ -35,7 +35,7 @@ class IngestedTransactionResource extends JsonResource
             ],
             'items' => $this->items->map(fn (TransactionItem $item): array => [
                 'product_id' => $item->product_id,
-                'product_external_id' => $item->product->external_id,
+                'sku' => $item->product->sku,
                 'quantity' => $item->quantity,
                 'unit_price' => $item->unit_price,
                 'line_total' => $item->line_total,

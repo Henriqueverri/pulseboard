@@ -52,6 +52,7 @@ Route::prefix('v1')->group(function (): void {
 
     // Integration API: API key only (no session, CSRF or X-Organization-Id), rate limited per key.
     Route::prefix('ingest')->middleware(['api-key', 'throttle:ingest'])->group(function (): void {
+        Route::post('/transactions', [IngestTransactionController::class, 'store']);
         Route::get('/transactions/{externalId}', [IngestTransactionController::class, 'show']);
     });
 });

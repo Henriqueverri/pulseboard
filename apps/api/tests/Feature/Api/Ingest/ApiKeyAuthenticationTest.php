@@ -34,7 +34,7 @@ class ApiKeyAuthenticationTest extends TestCase
             ->assertJsonPath('data.total_amount', '99.80')
             ->assertJsonPath('data.occurred_at', $transaction->occurred_at->toJSON())
             ->assertJsonPath('data.customer', ['id' => $transaction->customer_id, 'external_id' => 'cus-shop:order-1'])
-            ->assertJsonPath('data.items.0.product_external_id', 'prd-shop:order-1')
+            ->assertJsonPath('data.items.0.sku', $transaction->items->first()->product->sku)
             ->assertJsonPath('data.items.0.quantity', 2)
             ->assertJsonPath('data.items.0.unit_price', '49.90')
             ->assertJsonPath('data.items.0.line_total', '99.80')
