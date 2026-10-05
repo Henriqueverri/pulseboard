@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Ai;
 
+use App\Models\AiInsight;
 use App\Models\Organization;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Api\Concerns\InteractsWithOrganizationApi;
@@ -68,6 +69,32 @@ class OrganizationInsightsTest extends TestCase
         $this->organization->refresh();
         $this->assertFalse($this->organization->insightsEnabled());
         $this->assertNull($this->organization->ai_insights_enabled_by);
+    }
+
+    public function test_opting_out_deletes_the_cached_insights_of_the_organization_only(): void
+    {
+        $owner = $this->memberOf($this->organization);
+        $this->organization->enableInsights($owner);
+        $other = Organization::factory()->create();
+        $other->enableInsights(null);
+
+        foreach ([$this->organization, $this->organization, $other] as $index => $organization) {
+            AiInsight::query()->create([
+                'organization_id' => $organization->id,
+                'kind' => AiInsight::KIND_PERIOD_SUMMARY,
+                'fingerprint' => str_repeat((string) $index, 64),
+                'model' => 'scripted',
+                'prompt_version' => 'period_summary.v1',
+                'content' => ['headline' => 'Resumo em cache'],
+            ]);
+        }
+
+        $this->actingInOrganization($owner, $this->organization)
+            ->putJson('/api/v1/organization/insights', ['enabled' => false])
+            ->assertOk();
+
+        $this->assertSame(0, AiInsight::query()->forOrganization($this->organization)->count());
+        $this->assertSame(1, AiInsight::query()->forOrganization($other)->count());
     }
 
     public function test_a_member_cannot_change_the_opt_in(): void

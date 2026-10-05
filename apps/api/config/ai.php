@@ -72,4 +72,9 @@ return [
         'demo_requests_per_minute_per_ip' => (int) env('AI_DEMO_REQUESTS_PER_MINUTE_PER_IP', 3),
     ],
 
+    'insights' => [
+        // Below this many paid orders a period gets the low_volume caveat (no trend claims).
+        'low_volume_orders' => (int) env('AI_LOW_VOLUME_ORDERS', 20),
+    ],
+
 ];

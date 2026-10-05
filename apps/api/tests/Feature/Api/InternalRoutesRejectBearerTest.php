@@ -44,6 +44,28 @@ class InternalRoutesRejectBearerTest extends TestCase
         $this->getJson('/api/v1/auth/me')->assertUnauthorized();
     }
 
+    #[DataProvider('origins')]
+    public function test_bearer_token_on_the_insights_routes_is_a_401(bool $stateful): void
+    {
+        $organization = Organization::factory()->create();
+        $headers = [
+            'Authorization' => 'Bearer pb_Ab12Cd34Ef56_not-a-real-secret',
+            'X-Organization-Id' => $organization->id,
+        ];
+
+        $this->withoutOriginUnless($stateful)
+            ->withHeaders($headers)
+            ->getJson('/api/v1/insights/period-summary')
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'Unauthenticated.']);
+
+        $this->withoutOriginUnless($stateful)
+            ->withHeaders($headers)
+            ->postJson('/api/v1/insights/period-summary')
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'Unauthenticated.']);
+    }
+
     public function test_bearer_token_does_not_replace_or_break_a_valid_session(): void
     {
         $organization = Organization::factory()->create();

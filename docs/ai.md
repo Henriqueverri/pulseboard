@@ -15,6 +15,16 @@ Uma camada de IA **somente leitura** sobre os services de analytics existentes. 
 - `RateLimiter::for('insights')`: por usuário na organização e, na organização de demo (login compartilhado), também por IP.
 - `Http::preventStrayRequests()` no `TestCase`: nenhum teste chama a OpenAI.
 
+## Resumo inteligente do período (backend implementado)
+
+- `GET /api/v1/insights/period-summary?from&to`: devolve o resumo já gerado para os dados atuais do período, ou `data: null`. Nunca chama o provedor.
+- `POST /api/v1/insights/period-summary` (`{from, to}`): gera o resumo, ou serve o cache quando os dados não mudaram. Rate limit `insights`.
+- `PeriodSummaryContextBuilder` chama os 5 services de analytics (11 queries fixas) e monta o `EvidenceCatalog` (`kpi.*`, `customers.*`, `products.*`, `status.*`, `product.1..5`) e o contexto enviado ao modelo. O ranking de clientes é descartado; produtos vão por posição, num bloco marcado como não confiável.
+- `PeriodSummaryCaveats`: `partial_period`, `no_sales`, `no_previous_data`, `low_volume` (`AI_LOW_VOLUME_ORDERS`, 20 por padrão) e `status_is_current`, calculadas pelo servidor.
+- `PeriodSummarySchema` (`period_summary_v1`, strict, `evidence` em enum das refs presentes) e `PeriodSummaryValidator` (estrutura, tamanhos, refs existentes, nenhum dígito, coerência de direção pela polaridade).
+- `PeriodSummaryService`: guard → contexto → fingerprint (SHA-256 do contexto + prompt + provedor/modelo) → cache em `ai_insights` → cota → lock por organização e fingerprint → modelo → validação com 1 reparo → cache → `ai_runs`. Saída inválida responde `ai_invalid_output` e nunca é cacheada. Desativar o opt-in apaga o cache da organização.
+- Prompt versionado em `apps/api/resources/ai/prompts/period_summary.v1.md`.
+
 ## Architecture Decision Records
 
 ### ADR-1 — Tool calling em vez de Text-to-SQL

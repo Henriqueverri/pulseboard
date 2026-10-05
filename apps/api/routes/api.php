@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\Ingest\IngestStatusChangeController;
 use App\Http\Controllers\Api\Ingest\IngestTransactionController;
+use App\Http\Controllers\Api\Insights\PeriodSummaryController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\OrganizationInsightsController;
 use App\Http\Controllers\Api\ProductController;
@@ -42,6 +43,13 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/products', ProductAnalyticsController::class);
             Route::get('/customers', CustomerAnalyticsController::class);
             Route::get('/transactions', TransactionStatusAnalyticsController::class);
+        });
+
+        // Reading the cached summary is free; only generating it is rate limited.
+        Route::prefix('insights')->group(function (): void {
+            Route::get('/period-summary', [PeriodSummaryController::class, 'show']);
+            Route::post('/period-summary', [PeriodSummaryController::class, 'store'])
+                ->middleware('throttle:insights');
         });
 
         Route::apiResource('products', ProductController::class);

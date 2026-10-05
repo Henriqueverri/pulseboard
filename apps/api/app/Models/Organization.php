@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class Organization extends Model
@@ -73,12 +74,19 @@ class Organization extends Model
         ])->save();
     }
 
+    /**
+     * Opting out also deletes every cached insight of the organization.
+     */
     public function disableInsights(): void
     {
-        $this->forceFill([
-            'ai_insights_enabled_at' => null,
-            'ai_insights_enabled_by' => null,
-        ])->save();
+        DB::transaction(function (): void {
+            $this->forceFill([
+                'ai_insights_enabled_at' => null,
+                'ai_insights_enabled_by' => null,
+            ])->save();
+
+            AiInsight::query()->forOrganization($this)->delete();
+        });
     }
 
     /**
