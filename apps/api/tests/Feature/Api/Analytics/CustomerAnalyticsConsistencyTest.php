@@ -128,8 +128,11 @@ class CustomerAnalyticsConsistencyTest extends TestCase
 
     public function test_previous_values_match_a_request_for_the_previous_period(): void
     {
-        $current = $this->fetch("/api/v1/analytics/customers?{$this->query($this->period)}&limit=50")->assertOk();
-        $earlier = $this->fetch("/api/v1/analytics/customers?{$this->query($this->period->previous())}&limit=50")->assertOk();
+        // A week keeps the whole previous ranking within the API's 50-row limit.
+        $week = ReportingPeriod::lastDays(7, $this->organization->timezone);
+
+        $current = $this->fetch("/api/v1/analytics/customers?{$this->query($week)}&limit=50")->assertOk();
+        $earlier = $this->fetch("/api/v1/analytics/customers?{$this->query($week->previous())}&limit=50")->assertOk();
 
         foreach (['total_customers', 'active_customers', 'new_customers', 'returning_customers'] as $metric) {
             $this->assertSame($earlier->json("summary.{$metric}.value"), $current->json("summary.{$metric}.previous"), $metric);
