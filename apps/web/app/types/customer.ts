@@ -6,6 +6,8 @@ export interface Customer {
   id: string
   name: string
   email: string
+  /** The customer's id in an integrating system; the ingestion API resolves customers by it. */
+  external_id: string | null
   created_at: IsoDateTime
   updated_at: IsoDateTime
 }
@@ -20,6 +22,7 @@ export interface CustomerDetail extends Customer {
 export interface CustomerInput {
   name: string
   email: string
+  external_id: string | null
 }
 
 export interface CustomerListParams {

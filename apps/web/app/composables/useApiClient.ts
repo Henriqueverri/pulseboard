@@ -1,5 +1,5 @@
 import type { ApiErrorBody } from '~/types/api'
-import { ApiError } from '~/utils/api-error'
+import { ApiError, parseRetryAfter } from '~/utils/api-error'
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
@@ -44,7 +44,7 @@ function toApiError(error: unknown): ApiError {
     return error
   }
 
-  const fetchError = error as { status?: number, statusCode?: number, data?: unknown, response?: unknown }
+  const fetchError = error as { status?: number, statusCode?: number, data?: unknown, response?: { headers?: Headers } }
   const status = fetchError.statusCode ?? fetchError.status
 
   if (!status || !fetchError.response) {
@@ -52,8 +52,12 @@ function toApiError(error: unknown): ApiError {
   }
 
   const body = fetchError.data && typeof fetchError.data === 'object' ? fetchError.data as ApiErrorBody : null
+  const headers = fetchError.response.headers
 
-  return new ApiError(status, body)
+  return new ApiError(status, body, undefined, {
+    retryAfter: parseRetryAfter(headers?.get('Retry-After')),
+    requestId: headers?.get('X-Request-Id') ?? null,
+  })
 }
 
 /**

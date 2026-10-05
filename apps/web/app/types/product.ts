@@ -11,6 +11,8 @@ export interface Product {
   sku: string | null
   price: Money
   status: ProductStatus
+  /** The product's id in an integrating system, unique per organization. */
+  external_id: string | null
   created_at: IsoDateTime
   updated_at: IsoDateTime
 }
@@ -26,6 +28,7 @@ export interface ProductInput {
   sku: string | null
   price: Money
   status: ProductStatus
+  external_id: string | null
 }
 
 export interface ProductListParams {

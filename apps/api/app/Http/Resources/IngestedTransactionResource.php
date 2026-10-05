@@ -4,7 +4,6 @@ namespace App\Http\Resources;
 
 use App\Models\Transaction;
 use App\Models\TransactionItem;
-use App\Models\TransactionStatusChange;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -40,27 +39,7 @@ class IngestedTransactionResource extends JsonResource
                 'unit_price' => $item->unit_price,
                 'line_total' => $item->line_total,
             ])->all(),
-            'status_history' => TransactionStatusChangeResource::collection($this->statusHistory()),
+            'status_history' => TransactionStatusChangeResource::collection($this->resource->statusHistory()),
         ];
-    }
-
-    /**
-     * Several changes may share occurred_at (and created_at), so the order follows
-     * the chain from creation (from_status null) instead of timestamps.
-     *
-     * @return list<TransactionStatusChange>
-     */
-    private function statusHistory(): array
-    {
-        $byFromStatus = $this->statusChanges->keyBy(fn (TransactionStatusChange $change) => $change->from_status->value ?? '');
-        $history = [];
-        $from = '';
-
-        while (count($history) < $byFromStatus->count() && ($change = $byFromStatus->get($from)) !== null) {
-            $history[] = $change;
-            $from = $change->to_status->value;
-        }
-
-        return $history;
     }
 }

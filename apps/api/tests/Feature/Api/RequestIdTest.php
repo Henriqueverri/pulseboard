@@ -15,6 +15,16 @@ class RequestIdTest extends TestCase
 {
     use InteractsWithIngestApi, InteractsWithOrganizationApi, RefreshDatabase;
 
+    public function test_the_spa_origin_can_read_the_request_id_and_retry_after(): void
+    {
+        $exposed = $this->getJson('/api/v1/health')->headers->get('Access-Control-Expose-Headers');
+
+        $this->assertNotNull($exposed);
+        $headers = array_map(fn (string $header) => strtolower(trim($header)), explode(',', $exposed));
+        $this->assertContains('x-request-id', $headers);
+        $this->assertContains('retry-after', $headers);
+    }
+
     public function test_every_api_response_carries_a_generated_request_id(): void
     {
         $organization = Organization::factory()->create();

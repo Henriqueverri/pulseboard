@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Enums\TransactionSource;
 use App\Enums\TransactionStatus;
 use App\Models\Customer;
 use App\Models\Organization;
@@ -126,6 +127,65 @@ class TransactionApiTest extends TestCase
         $this->listTransactions('q='.strtoupper($target->id))
             ->assertOk()
             ->assertJsonPath('data.*.id', [$target->id]);
+    }
+
+    public function test_index_exposes_external_id_and_source(): void
+    {
+        $seeded = $this->createTransaction($this->customer, [[$this->product, 1, '10.00']], occurredAt: '2026-09-01 12:00:00');
+        $ingested = $this->createTransaction($this->customer, [[$this->product, 1, '10.00']], occurredAt: '2026-09-02 12:00:00');
+        $ingested->forceFill(['external_id' => 'order_123', 'source' => TransactionSource::Ingest])->save();
+
+        $this->listTransactions()
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $ingested->id)
+            ->assertJsonPath('data.0.external_id', 'order_123')
+            ->assertJsonPath('data.0.source', 'ingest')
+            ->assertJsonPath('data.1.id', $seeded->id)
+            ->assertJsonPath('data.1.external_id', null)
+            ->assertJsonPath('data.1.source', 'seed')
+            ->assertJsonMissingPath('data.0.status_history');
+    }
+
+    public function test_index_searches_by_exact_external_id(): void
+    {
+        $target = $this->createTransaction($this->customer, [[$this->product, 1, '10.00']]);
+        $target->forceFill(['external_id' => 'order_123'])->save();
+        $other = $this->createTransaction($this->customer, [[$this->product, 1, '10.00']]);
+        $other->forceFill(['external_id' => 'order_1234'])->save();
+
+        $this->listTransactions('q=order_123')
+            ->assertOk()
+            ->assertJsonPath('data.*.id', [$target->id]);
+
+        $this->listTransactions('q=order_12')
+            ->assertOk()
+            ->assertJsonPath('data', []);
+    }
+
+    public function test_index_searches_uuid_shaped_external_id_and_transaction_id(): void
+    {
+        $externalId = '7a1f6c2e-5b1d-4c3a-9e2f-1d2c3b4a5e6f';
+        $byExternalId = $this->createTransaction($this->customer, [[$this->product, 1, '10.00']], occurredAt: '2026-09-01 12:00:00');
+        $byExternalId->forceFill(['external_id' => $externalId])->save();
+        $byId = $this->createTransaction($this->customer, [[$this->product, 1, '10.00']], occurredAt: '2026-09-02 12:00:00');
+
+        $this->listTransactions("q={$externalId}")
+            ->assertOk()
+            ->assertJsonPath('data.*.id', [$byExternalId->id]);
+
+        $this->listTransactions("q={$byId->id}")
+            ->assertOk()
+            ->assertJsonPath('data.*.id', [$byId->id]);
+    }
+
+    public function test_index_search_by_external_id_stays_within_the_organization(): void
+    {
+        [$foreign] = $this->foreignTenantTransaction();
+        $foreign->forceFill(['external_id' => 'order_123'])->save();
+
+        $this->listTransactions('q=order_123')
+            ->assertOk()
+            ->assertJsonPath('data', []);
     }
 
     public function test_index_searches_by_customer_name_and_email_case_insensitively(): void
@@ -295,6 +355,69 @@ class TransactionApiTest extends TestCase
         $this->assertSame('CB-1', $items[$second->id]['product']['sku']);
         $this->assertSame('59.70', $items[$second->id]['line_total']);
         $this->assertSame('159.50', $response->json('data.total_amount'));
+    }
+
+    public function test_show_includes_external_id_source_and_status_history_in_lifecycle_order(): void
+    {
+        $transaction = Transaction::factory()
+            ->for($this->organization)
+            ->for($this->customer)
+            ->status(TransactionStatus::Refunded)
+            ->create(['occurred_at' => '2026-09-15 14:32:00']);
+
+        $this->actingInOrganization($this->owner, $this->organization)
+            ->getJson("/api/v1/transactions/{$transaction->id}")
+            ->assertOk()
+            ->assertJsonPath('data.external_id', null)
+            ->assertJsonPath('data.source', 'seed')
+            ->assertJsonCount(2, 'data.status_history')
+            ->assertJsonPath('data.status_history.0.from_status', null)
+            ->assertJsonPath('data.status_history.0.to_status', 'paid')
+            ->assertJsonPath('data.status_history.1.from_status', 'paid')
+            ->assertJsonPath('data.status_history.1.to_status', 'refunded')
+            ->assertJsonPath('data.status_history.1.source', 'seed')
+            ->assertJsonStructure(['data' => ['status_history' => [['from_status', 'to_status', 'occurred_at', 'recorded_at', 'source']]]]);
+    }
+
+    public function test_show_history_follows_the_chain_when_changes_share_timestamps(): void
+    {
+        $transaction = $this->createTransaction($this->customer, [[$this->product, 1, '10.00']], TransactionStatus::Refunded);
+        $transaction->forceFill(['external_id' => 'order_9', 'source' => TransactionSource::Ingest])->save();
+
+        // Inserted out of order with identical timestamps: only the chain defines the order.
+        foreach ([['paid', 'refunded'], [null, 'pending'], ['pending', 'paid']] as [$from, $to]) {
+            $transaction->statusChanges()->create([
+                'organization_id' => $this->organization->id,
+                'from_status' => $from,
+                'to_status' => $to,
+                'occurred_at' => $transaction->occurred_at,
+                'source' => TransactionSource::Ingest,
+            ]);
+        }
+
+        $response = $this->actingInOrganization($this->owner, $this->organization)
+            ->getJson("/api/v1/transactions/{$transaction->id}")
+            ->assertOk()
+            ->assertJsonPath('data.external_id', 'order_9')
+            ->assertJsonPath('data.source', 'ingest');
+
+        $this->assertSame(
+            [[null, 'pending'], ['pending', 'paid'], ['paid', 'refunded']],
+            array_map(fn (array $change) => [$change['from_status'], $change['to_status']], $response->json('data.status_history')),
+        );
+    }
+
+    public function test_compact_embeds_do_not_render_unselected_columns(): void
+    {
+        $this->createTransaction($this->customer, [[$this->product, 1, '10.00']]);
+
+        $this->actingInOrganization($this->owner, $this->organization)
+            ->getJson("/api/v1/customers/{$this->customer->id}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data.recent_transactions')
+            ->assertJsonMissingPath('data.recent_transactions.0.external_id')
+            ->assertJsonMissingPath('data.recent_transactions.0.source')
+            ->assertJsonMissingPath('data.recent_transactions.0.status_history');
     }
 
     public function test_show_returns_404_for_unknown_or_malformed_id(): void

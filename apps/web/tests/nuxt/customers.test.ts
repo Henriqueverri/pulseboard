@@ -32,6 +32,7 @@ const customer: Customer = {
   id: '0199a000-0000-7000-8000-0000000000c1',
   name: 'Maria Souza',
   email: 'maria@example.com',
+  external_id: null,
   created_at: '2026-09-01T12:00:00Z',
   updated_at: '2026-09-01T12:00:00Z',
 }
@@ -48,9 +49,16 @@ beforeEach(() => {
 
 describe('changedCustomerFields', () => {
   it('ignores case-only email changes (the API lowercases emails)', () => {
-    expect(changedCustomerFields(customer, { name: 'Maria Souza', email: 'MARIA@example.com' })).toEqual({})
-    expect(changedCustomerFields(customer, { name: 'Maria S.', email: 'maria.s@example.com' }))
+    expect(changedCustomerFields(customer, { name: 'Maria Souza', email: 'MARIA@example.com', external_id: null })).toEqual({})
+    expect(changedCustomerFields(customer, { name: 'Maria S.', email: 'maria.s@example.com', external_id: null }))
       .toEqual({ name: 'Maria S.', email: 'maria.s@example.com' })
+  })
+
+  it('includes external_id only when it changes', () => {
+    expect(changedCustomerFields(customer, { name: 'Maria Souza', email: 'maria@example.com', external_id: 'cus_42' }))
+      .toEqual({ external_id: 'cus_42' })
+    expect(changedCustomerFields({ ...customer, external_id: 'cus_42' }, { name: 'Maria Souza', email: 'maria@example.com', external_id: null }))
+      .toEqual({ external_id: null })
   })
 })
 
@@ -65,7 +73,7 @@ describe('CustomerFormDialog', () => {
     await type(field('E-mail'), ' maria@example.com ')
     await clickButton('Criar cliente')
 
-    expect(repository.create).toHaveBeenCalledWith({ name: 'Maria Souza', email: 'maria@example.com' })
+    expect(repository.create).toHaveBeenCalledWith({ name: 'Maria Souza', email: 'maria@example.com', external_id: null })
     expect(wrapper.emitted('saved')?.[0]).toEqual([customer, 'created'])
     wrapper.unmount()
   })

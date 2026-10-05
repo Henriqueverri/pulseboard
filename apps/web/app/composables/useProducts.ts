@@ -51,6 +51,9 @@ export function changedFields(product: Product, input: ProductInput): Partial<Pr
   if (input.status !== product.status) {
     changes.status = input.status
   }
+  if (input.external_id !== product.external_id) {
+    changes.external_id = input.external_id
+  }
 
   return changes
 }

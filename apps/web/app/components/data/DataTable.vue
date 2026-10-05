@@ -6,7 +6,7 @@ export interface DataColumn {
   label: string
   align?: 'left' | 'right'
   /** Hide the column on narrow screens (the row should repeat the essentials elsewhere). */
-  hideBelow?: 'sm' | 'md' | 'lg'
+  hideBelow?: 'sm' | 'md' | 'lg' | 'xl'
   /** Keep the header only for screen readers (e.g. an actions column). */
   srOnlyLabel?: boolean
   class?: string
@@ -35,6 +35,7 @@ const HIDE_BELOW = {
   sm: 'hidden sm:table-cell',
   md: 'hidden md:table-cell',
   lg: 'hidden lg:table-cell',
+  xl: 'hidden xl:table-cell',
 } as const
 
 function cellClass(column: DataColumn) {

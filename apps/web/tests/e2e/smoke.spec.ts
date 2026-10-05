@@ -56,6 +56,8 @@ test('login → dashboard → product CRUD → transaction → analytics', async
     await page.locator('tbody a[href^="/transactions/"]').first().click()
 
     await expect(page.getByRole('heading', { name: 'Itens' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Ciclo de vida' })).toBeVisible()
+    await expect(page.getByRole('list', { name: 'Histórico de status' }).getByRole('listitem').first()).toContainText('Criada como')
     await expect(page.getByRole('button', { name: /Editar|Excluir/ })).toHaveCount(0)
   })
 

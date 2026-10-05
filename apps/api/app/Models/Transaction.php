@@ -90,6 +90,27 @@ class Transaction extends Model
     }
 
     /**
+     * The loaded statusChanges in lifecycle order. Several changes may share
+     * occurred_at (and created_at), so the order follows the chain from creation
+     * (from_status null) instead of timestamps.
+     *
+     * @return list<TransactionStatusChange>
+     */
+    public function statusHistory(): array
+    {
+        $byFromStatus = $this->statusChanges->keyBy(fn (TransactionStatusChange $change) => $change->from_status->value ?? '');
+        $history = [];
+        $from = '';
+
+        while (count($history) < $byFromStatus->count() && ($change = $byFromStatus->get($from)) !== null) {
+            $history[] = $change;
+            $from = $change->to_status->value;
+        }
+
+        return $history;
+    }
+
+    /**
      * The API key that ingested this transaction (null for seeded transactions).
      *
      * @return BelongsTo<ApiKey, $this>
@@ -123,23 +144,30 @@ class Transaction extends Model
     }
 
     /**
-     * A UUID term matches the transaction id exactly; any other term is a
-     * case-insensitive match on the customer's name or email (soft-deleted customers included).
+     * Every term matches the external_id exactly. A UUID term also matches the
+     * transaction id; any other term also matches the customer's name or email,
+     * case-insensitively (soft-deleted customers included).
      *
      * @param  Builder<static>  $query
      * @return Builder<static>
      */
     public function scopeSearch(Builder $query, string $term): Builder
     {
-        if (Str::isUuid($term)) {
-            return $query->whereKey(Str::lower($term));
-        }
+        return $query->where(function (Builder $query) use ($term): void {
+            $query->where($this->qualifyColumn('external_id'), $term);
 
-        return $query->whereHas('customer', fn (Builder $customer) => $customer->where(
-            fn (Builder $customer) => $customer
-                ->whereLike($customer->qualifyColumn('name'), "%{$term}%")
-                ->orWhereLike($customer->qualifyColumn('email'), "%{$term}%")
-        ));
+            if (Str::isUuid($term)) {
+                $query->orWhere($this->qualifyColumn('id'), Str::lower($term));
+
+                return;
+            }
+
+            $query->orWhereHas('customer', fn (Builder $customer) => $customer->where(
+                fn (Builder $customer) => $customer
+                    ->whereLike($customer->qualifyColumn('name'), "%{$term}%")
+                    ->orWhereLike($customer->qualifyColumn('email'), "%{$term}%")
+            ));
+        });
     }
 
     public function recalculateTotal(): void

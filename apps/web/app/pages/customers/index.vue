@@ -19,6 +19,7 @@ const search = computed({
 const columns: DataColumn[] = [
   { key: 'name', label: 'Cliente' },
   { key: 'email', label: 'E-mail', hideBelow: 'md' },
+  { key: 'external_id', label: 'ID externo', hideBelow: 'xl' },
   { key: 'created_at', label: 'Cliente desde', hideBelow: 'lg' },
   { key: 'actions', label: 'Ações', srOnlyLabel: true, align: 'right', class: 'w-12' },
 ]
@@ -139,6 +140,17 @@ async function onSaved(customer: Customer, mode: 'created' | 'updated') {
         </template>
         <template #cell-email="{ row }">
           <span class="text-ink/70">{{ row.email }}</span>
+        </template>
+        <template #cell-external_id="{ row }">
+          <span
+            v-if="row.external_id"
+            class="block max-w-[200px] truncate font-mono text-xs text-ink/70"
+            :title="row.external_id"
+          >{{ row.external_id }}</span>
+          <span
+            v-else
+            class="text-ink/65"
+          >{{ EMPTY_VALUE }}</span>
         </template>
         <template #cell-created_at="{ row }">
           <span class="text-ink/70 tabular">{{ formatDateTime(row.created_at, timezone, { time: false }) }}</span>

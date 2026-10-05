@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { PhChartLineUp, PhShieldCheck, PhUsersThree } from '@phosphor-icons/vue'
+import { PhChartLineUp, PhPlugsConnected, PhShieldCheck, PhUsersThree } from '@phosphor-icons/vue'
 
 const highlights = [
+  { icon: PhPlugsConnected, title: 'Integração por API', text: 'Seu sistema envia transações com uma API Key; reenvios não duplicam e cada mudança de status fica no histórico.' },
   { icon: PhChartLineUp, title: 'Receita e pedidos', text: 'Compare cada período com o anterior, no fuso da sua organização.' },
   { icon: PhUsersThree, title: 'Produtos e clientes', text: 'Rankings de quem mais vende e de quem mais compra.' },
   { icon: PhShieldCheck, title: 'Dados isolados', text: 'Cada organização vê somente as próprias transações.' },
@@ -27,7 +28,7 @@ const highlights = [
 
       <div class="relative max-w-md">
         <h2 class="text-3xl font-semibold leading-tight tracking-tight xl:text-4xl">
-          As métricas de vendas da sua organização, em um só lugar.
+          Transações do seu sistema viram métricas de vendas confiáveis.
         </h2>
         <ul class="mt-10 space-y-6">
           <li

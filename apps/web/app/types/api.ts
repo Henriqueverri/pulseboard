@@ -74,5 +74,7 @@ export interface PeriodParams {
 
 export interface ApiErrorBody {
   message?: string
+  /** Machine-readable error code (e.g. `rate_limited`), sent by some endpoints. */
+  code?: string
   errors?: Record<string, string[]>
 }

@@ -24,7 +24,8 @@ return [
 
     'allowed_headers' => ['*'],
 
-    'exposed_headers' => [],
+    // Readable by the SPA (cross-origin): Retry-After on 429, X-Request-Id for support.
+    'exposed_headers' => ['Retry-After', 'X-Request-Id'],
 
     'max_age' => 0,
 

@@ -13,10 +13,10 @@ const emit = defineEmits<{ saved: [product: Product, mode: 'created' | 'updated'
 
 const mutations = useProductMutations()
 const { fieldErrors, formError, capture, clear, reset, setFieldError } = useFormErrors(
-  ['name', 'sku', 'price', 'status'] as const,
+  ['name', 'sku', 'price', 'status', 'external_id'] as const,
 )
 
-const form = reactive({ name: '', sku: '', price: null as string | null, active: true })
+const form = reactive({ name: '', sku: '', price: null as string | null, active: true, externalId: '' })
 const pending = ref(false)
 const isEdit = computed(() => props.product !== null)
 
@@ -30,6 +30,7 @@ watch(open, (value) => {
   form.sku = props.product?.sku ?? ''
   form.price = props.product?.price ?? null
   form.active = (props.product?.status ?? 'active') === 'active'
+  form.externalId = props.product?.external_id ?? ''
 }, { immediate: true })
 
 function toInput(): ProductInput | null {
@@ -44,6 +45,7 @@ function toInput(): ProductInput | null {
     sku: form.sku.trim() || null,
     price: form.price,
     status: form.active ? 'active' : 'inactive',
+    external_id: form.externalId.trim() || null,
   }
 }
 
@@ -121,7 +123,7 @@ async function onSubmit() {
           v-slot="{ id, describedBy, invalid }"
           label="SKU"
           optional
-          hint="Único na organização."
+          hint="Único na organização. A API de ingestão identifica os itens pelo SKU."
           :error="fieldErrors.sku"
         >
           <UiInput
@@ -151,6 +153,26 @@ async function onSubmit() {
           />
         </UiFormField>
       </div>
+
+      <UiFormField
+        v-slot="{ id, describedBy, invalid }"
+        label="ID externo"
+        optional
+        hint="ID do produto no seu sistema. Único na organização."
+        :error="fieldErrors.external_id"
+      >
+        <UiInput
+          :id="id"
+          v-model="form.externalId"
+          maxlength="128"
+          autocomplete="off"
+          spellcheck="false"
+          class="font-mono"
+          :invalid="invalid"
+          :described-by="describedBy"
+          @update:model-value="clear('external_id')"
+        />
+      </UiFormField>
 
       <div class="flex items-start justify-between gap-4 rounded-lg border border-ink/[0.08] px-3.5 py-3">
         <div>

@@ -154,6 +154,14 @@ async function onDeleted() {
               {{ product.sku ?? EMPTY_VALUE }}
             </dd>
           </div>
+          <div class="sm:col-span-2">
+            <dt class="text-ink/65">
+              ID externo
+            </dt>
+            <dd class="mt-0.5 break-all font-mono text-xs font-medium">
+              {{ product.external_id ?? EMPTY_VALUE }}
+            </dd>
+          </div>
           <div>
             <dt class="text-ink/65">
               Criado em

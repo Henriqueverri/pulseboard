@@ -94,6 +94,12 @@ async function onSaved(saved: Customer) {
             <p class="truncate text-sm text-ink/65">
               {{ customer.email }} · cliente desde {{ formatDateTime(customer.created_at, timezone, { time: false }) }}
             </p>
+            <p
+              v-if="customer.external_id"
+              class="truncate text-xs text-ink/65"
+            >
+              ID externo <span class="font-mono text-ink/80">{{ customer.external_id }}</span>
+            </p>
           </div>
         </div>
         <div class="flex shrink-0 gap-2">
