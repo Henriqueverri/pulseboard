@@ -72,3 +72,12 @@ services:
         value: demo@example.com
       - key: DEMO_MEMBER_EMAIL
         value: demo-member@example.com
+      # PulseBoard Insights: off until the key is set and the demo limits are checked (docs/ai.md).
+      - key: AI_ENABLED
+        value: "false"
+      - key: AI_PROVIDER
+        value: openai
+      - key: AI_MODEL
+        value: gpt-6-luna
+      - key: OPENAI_API_KEY
+        sync: false

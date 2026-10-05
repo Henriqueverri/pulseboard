@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\Ingest\IngestStatusChangeController;
 use App\Http\Controllers\Api\Ingest\IngestTransactionController;
 use App\Http\Controllers\Api\OrganizationController;
+use App\Http\Controllers\Api\OrganizationInsightsController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\TransactionController;
 use Illuminate\Support\Facades\Route;
@@ -33,6 +34,7 @@ Route::prefix('v1')->group(function (): void {
 
     Route::middleware(['auth:sanctum', 'organization'])->group(function (): void {
         Route::get('/organization', [OrganizationController::class, 'show']);
+        Route::put('/organization/insights', [OrganizationInsightsController::class, 'update']);
         Route::get('/dashboard', DashboardController::class);
 
         Route::prefix('analytics')->group(function (): void {

@@ -15,8 +15,8 @@ mockNuxtImport('navigateTo', () => navigateToMock)
 mockNuxtImport('clearNuxtData', () => clearNuxtDataMock)
 
 const user = { id: 'u1', name: 'Owner', email: 'owner@example.com' }
-const orgA: Organization = { id: '0199a000-0000-7000-8000-00000000000a', name: 'Loja A', slug: 'a', currency: 'BRL', timezone: 'America/Sao_Paulo', role: 'owner' }
-const orgB: Organization = { id: '0199a000-0000-7000-8000-00000000000b', name: 'Loja B', slug: 'b', currency: 'USD', timezone: 'UTC', role: 'member' }
+const orgA: Organization = { id: '0199a000-0000-7000-8000-00000000000a', name: 'Loja A', slug: 'a', currency: 'BRL', timezone: 'America/Sao_Paulo', insights: { available: false, enabled: false }, role: 'owner' }
+const orgB: Organization = { id: '0199a000-0000-7000-8000-00000000000b', name: 'Loja B', slug: 'b', currency: 'USD', timezone: 'UTC', insights: { available: false, enabled: false }, role: 'member' }
 
 describe('useSidebar', () => {
   beforeEach(() => localStorage.clear())

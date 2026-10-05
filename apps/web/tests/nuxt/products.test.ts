@@ -24,7 +24,7 @@ vi.mock('~/repositories/productRepository', () => ({
 
 const user = { id: 'u1', name: 'Owner', email: 'owner@example.com' }
 const org = (role: 'owner' | 'member'): Organization => ({
-  id: '0199a000-0000-7000-8000-00000000000a', name: 'Loja', slug: 'loja', currency: 'BRL', timezone: 'America/Sao_Paulo', role,
+  id: '0199a000-0000-7000-8000-00000000000a', name: 'Loja', slug: 'loja', currency: 'BRL', timezone: 'America/Sao_Paulo', insights: { available: false, enabled: false }, role,
 })
 
 const product: Product = {

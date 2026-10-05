@@ -12,6 +12,10 @@ use App\Policies\CustomerPolicy;
 use App\Policies\OrganizationPolicy;
 use App\Policies\ProductPolicy;
 use App\Policies\TransactionPolicy;
+use App\Services\Ai\Fake\ScriptedLlmClient;
+use App\Services\Ai\LlmClient;
+use App\Services\Ai\OpenAi\OpenAiResponsesClient;
+use App\Support\CurrentOrganization;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -28,7 +32,18 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(LlmClient::class, fn ($app): LlmClient => match (config('ai.provider')) {
+            'scripted' => new ScriptedLlmClient(production: $app->isProduction()),
+            default => new OpenAiResponsesClient(
+                apiKey: config('services.openai.key'),
+                baseUrl: (string) config('services.openai.base_url'),
+                model: (string) config('ai.model'),
+                timeoutSeconds: (int) config('ai.timeout_seconds'),
+                connectTimeoutSeconds: (int) config('ai.connect_timeout_seconds'),
+                retries: (int) config('ai.retries'),
+                retryDelayMs: (int) config('ai.retry_delay_ms'),
+            ),
+        });
     }
 
     /**
@@ -56,6 +71,29 @@ class AppServiceProvider extends ServiceProvider
                     'message' => 'Too many requests.',
                     'code' => 'rate_limited',
                 ], 429, $headers));
+        });
+
+        // Per user in the organization; the demo login is shared, so the demo is also limited per IP.
+        RateLimiter::for('insights', function (Request $request): array {
+            $organization = CurrentOrganization::resolved();
+            $response = fn (Request $request, array $headers) => response()->json([
+                'message' => 'Too many requests.',
+                'code' => 'rate_limited',
+            ], 429, $headers);
+
+            $limits = [
+                Limit::perMinute((int) config('ai.limits.requests_per_minute'))
+                    ->by('insights:'.$organization?->id.':'.$request->user()?->getAuthIdentifier())
+                    ->response($response),
+            ];
+
+            if ($organization?->isDemo()) {
+                $limits[] = Limit::perMinute((int) config('ai.limits.demo_requests_per_minute_per_ip'))
+                    ->by('insights-demo-ip:'.$request->ip())
+                    ->response($response);
+            }
+
+            return $limits;
         });
     }
 }

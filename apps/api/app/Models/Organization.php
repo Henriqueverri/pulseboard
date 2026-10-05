@@ -40,6 +40,48 @@ class Organization extends Model
     ];
 
     /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'ai_insights_enabled_at' => 'datetime',
+        ];
+    }
+
+    /**
+     * Whether an owner opted this organization into PulseBoard Insights.
+     * AI_ENABLED (config ai.enabled) is checked separately by AiUsageGuard.
+     */
+    public function insightsEnabled(): bool
+    {
+        return $this->ai_insights_enabled_at !== null;
+    }
+
+    /**
+     * Idempotent: enabling again keeps who enabled it first and when.
+     */
+    public function enableInsights(?User $by): void
+    {
+        if ($this->insightsEnabled()) {
+            return;
+        }
+
+        $this->forceFill([
+            'ai_insights_enabled_at' => now(),
+            'ai_insights_enabled_by' => $by?->id,
+        ])->save();
+    }
+
+    public function disableInsights(): void
+    {
+        $this->forceFill([
+            'ai_insights_enabled_at' => null,
+            'ai_insights_enabled_by' => null,
+        ])->save();
+    }
+
+    /**
      * @return BelongsToMany<User, $this>
      */
     public function users(): BelongsToMany

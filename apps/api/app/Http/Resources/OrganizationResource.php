@@ -22,6 +22,11 @@ class OrganizationResource extends JsonResource
             'slug' => $this->slug,
             'currency' => $this->currency,
             'timezone' => $this->timezone,
+            // available: AI_ENABLED (the global kill switch); enabled: the organization's opt-in.
+            'insights' => [
+                'available' => (bool) config('ai.enabled'),
+                'enabled' => $this->insightsEnabled(),
+            ],
             'role' => $this->when(
                 isset($this->pivot?->role),
                 fn () => $this->pivot->role,

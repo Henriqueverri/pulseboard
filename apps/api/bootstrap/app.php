@@ -1,5 +1,6 @@
 <?php
 
+use App\Exceptions\AiException;
 use App\Exceptions\IngestionException;
 use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\AuthenticateApiKey;
@@ -9,7 +10,6 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
-use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -30,9 +30,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'api-key' => AuthenticateApiKey::class,
         ]);
 
-        // Tenant-scoped route model binding needs the organization context resolved first.
+        // Tenant-scoped route model binding and the insights rate limiter need the organization
+        // context resolved first (ThrottleRequests runs after authentication and before bindings).
         $middleware->prependToPriorityList(
-            before: SubstituteBindings::class,
+            before: ThrottleRequests::class,
             prepend: EnsureOrganizationContext::class,
         );
 
@@ -61,6 +62,13 @@ return Application::configure(basePath: dirname(__DIR__))
             }
 
             return response()->json($body, $exception->httpStatus);
+        });
+
+        $exceptions->render(function (AiException $exception, Request $request) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+            ], $exception->httpStatus, $exception->retryAfter !== null ? ['Retry-After' => (string) $exception->retryAfter] : []);
         });
 
         // The default message names the Eloquent model class.
