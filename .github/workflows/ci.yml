@@ -144,8 +144,13 @@ jobs:
           echo "::add-mask::$password"
           echo "DEMO_PASSWORD=$password" >> "$GITHUB_ENV"
 
+      # Insights on with the scripted provider (no key, no network): pulseboard:demo opts the
+      # demo organization in and the insights spec generates through ScriptedLlmClient.
       - name: Start the API with the demo accounts
         working-directory: apps/api
+        env:
+          AI_ENABLED: 'true'
+          AI_PROVIDER: scripted
         run: |
           composer install --no-interaction --no-progress --prefer-dist
           cp .env.example .env

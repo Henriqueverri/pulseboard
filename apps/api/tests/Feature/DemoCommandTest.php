@@ -6,6 +6,7 @@ use App\Console\Commands\DemoCommand;
 use App\Enums\ProductStatus;
 use App\Enums\TransactionSource;
 use App\Enums\TransactionStatus;
+use App\Models\AiRun;
 use App\Models\ApiKey;
 use App\Models\Customer;
 use App\Models\Organization;
@@ -14,12 +15,14 @@ use App\Models\Transaction;
 use App\Models\TransactionItem;
 use App\Models\TransactionStatusChange;
 use App\Models\User;
+use App\Services\Ai\Fake\ScriptedLlmClient;
 use Carbon\CarbonImmutable;
 use Database\Seeders\DemoDataSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Tests\Feature\Ai\Concerns\InteractsWithInsights;
 use Tests\Feature\Api\Concerns\InteractsWithOrganizationApi;
 use Tests\Feature\Domain\Concerns\AssertsStatusHistory;
 use Tests\TestCase;
@@ -27,6 +30,7 @@ use Tests\TestCase;
 class DemoCommandTest extends TestCase
 {
     use AssertsStatusHistory;
+    use InteractsWithInsights;
     use InteractsWithOrganizationApi;
     use RefreshDatabase;
 
@@ -403,6 +407,107 @@ class DemoCommandTest extends TestCase
 
         $this->assertModelExists($product);
         $this->assertSame(0, $impostor->users()->count());
+    }
+
+    public function test_leaves_insights_off_while_ai_is_disabled(): void
+    {
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+        $this->artisan('pulseboard:demo', ['--refresh' => true])->assertSuccessful();
+
+        $this->assertFalse(Organization::query()->sole()->insightsEnabled());
+    }
+
+    public function test_opts_only_the_demo_organization_into_insights_while_ai_is_enabled(): void
+    {
+        config(['ai.enabled' => true]);
+        $other = Organization::factory()->create();
+
+        $this->artisan('pulseboard:demo')
+            ->expectsOutputToContain('Insights enabled for the demo organization.')
+            ->assertSuccessful();
+
+        $demo = Organization::query()->where('slug', DemoCommand::ORGANIZATION_SLUG)->sole();
+        $this->assertTrue($demo->insightsEnabled());
+        $this->assertSame(User::query()->where('email', 'demo@example.com')->value('id'), $demo->ai_insights_enabled_by);
+        $this->assertFalse($other->refresh()->insightsEnabled());
+    }
+
+    public function test_rerunning_with_ai_enabled_turns_the_demo_opt_in_back_on(): void
+    {
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+        $demo = Organization::query()->sole();
+        $this->assertFalse($demo->insightsEnabled());
+
+        config(['ai.enabled' => true]);
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+        $enabledAt = $demo->refresh()->ai_insights_enabled_at;
+        $this->assertNotNull($enabledAt);
+
+        $this->travel(1)->hours();
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+        $this->assertEquals($enabledAt, $demo->refresh()->ai_insights_enabled_at);
+
+        $demo->disableInsights();
+        $this->artisan('pulseboard:demo', ['--refresh' => true])->assertSuccessful();
+        $this->assertTrue($demo->refresh()->insightsEnabled());
+    }
+
+    public function test_turning_ai_off_keeps_the_demo_opt_in_and_the_kill_switch_blocks_it(): void
+    {
+        config(['ai.enabled' => true]);
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+
+        config(['ai.enabled' => false]);
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+
+        $demo = Organization::query()->sole();
+        $owner = User::query()->where('email', 'demo@example.com')->sole();
+        $this->assertTrue($demo->insightsEnabled());
+
+        $this->actingInOrganization($owner, $demo)
+            ->postJson('/api/v1/insights/period-summary', ['from' => now()->subDays(29)->toDateString(), 'to' => now()->toDateString()])
+            ->assertStatus(503)
+            ->assertJsonPath('code', 'ai_disabled');
+        $this->assertSame(0, AiRun::query()->count());
+    }
+
+    public function test_after_seeding_only_the_demo_generates_with_the_scripted_provider(): void
+    {
+        config(['ai.enabled' => true]);
+        $provider = $this->scriptedProvider();
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+
+        $demo = Organization::query()->sole();
+        $owner = User::query()->where('email', 'demo@example.com')->sole();
+        $period = ['from' => now()->subDays(89)->toDateString(), 'to' => now()->toDateString()];
+
+        // Nothing queued: the scripted provider's own answer, the one the E2E job shows.
+        $this->actingInOrganization($owner, $demo)
+            ->postJson('/api/v1/insights/period-summary', $period)
+            ->assertOk()
+            ->assertJsonPath('data.headline', ScriptedLlmClient::PLACEHOLDER_TEXT)
+            ->assertJsonPath('data.findings.0.destination', 'dashboard')
+            ->assertJsonPath('data.findings.0.evidence.0.ref', 'kpi.revenue')
+            ->assertJsonPath('meta.insight.cached', false);
+        $this->assertCount(1, $provider->requests());
+        $this->assertSame(1, AiRun::query()->forOrganization($demo)->where('status', AiRun::STATUS_SUCCEEDED)->count());
+    }
+
+    public function test_after_seeding_other_organizations_still_cannot_generate(): void
+    {
+        config(['ai.enabled' => true]);
+        $provider = $this->scriptedProvider();
+        $other = Organization::factory()->create();
+        $otherOwner = $this->memberOf($other);
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+
+        $this->actingInOrganization($otherOwner, $other)
+            ->postJson('/api/v1/insights/period-summary', ['from' => now()->subDays(89)->toDateString(), 'to' => now()->toDateString()])
+            ->assertForbidden()
+            ->assertJsonPath('code', 'ai_not_enabled');
+
+        $this->assertSame([], $provider->requests());
+        $this->assertSame(0, AiRun::query()->count());
     }
 
     /**

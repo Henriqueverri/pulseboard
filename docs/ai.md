@@ -47,6 +47,12 @@ Uma camada de IA **somente leitura** sobre os services de analytics existentes. 
 - `pulseboard:ai-usage`: uso por dia (UTC), organização e modelo, com tokens, custo estimado, latência p50/p95 e o gasto do mês contra o orçamento.
 - Configuração e operação em [deployment.md](deployment.md#insights-custo-cotas-e-retenção).
 
+## Demo e prontidão
+
+- `pulseboard:demo` ativa o opt-in **só da organização de demo**, e só com `AI_ENABLED=true` (a mesma regra do `PUT /organization/insights`). Outras organizações continuam desativadas até um owner ativar.
+- E2E `insights.spec.ts` com o provedor roteirizado na CI: opt-in, estado "ainda não gerado", geração, resultado, evidência igual ao KPI, cache, destino com o mesmo período e axe ([testing.md](testing.md#e2e-playwright)).
+- Produção continua com `AI_ENABLED=false`. Variáveis, ordem para ligar o provedor real e como desligar em [deployment.md](deployment.md#ligar-os-insights-com-o-provedor-real). A avaliação com o modelo real (`--provider=openai --record --repeat=3`) ainda não rodou: depende da chave, configurada só como secret.
+
 ## Architecture Decision Records
 
 ### ADR-1 — Tool calling em vez de Text-to-SQL

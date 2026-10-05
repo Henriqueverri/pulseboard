@@ -146,7 +146,8 @@ No Pages (`CF_PAGES`), o Nitro usa o preset `cloudflare-pages-static`: gera `dis
 - sem `DEMO_PASSWORD` (ou com menos de 12 caracteres) o comando falha sem gravar nada;
 - se a demo já existe, mantém os dados, sincroniza a senha das duas contas com `DEMO_PASSWORD` e **completa o histórico até hoje**: gera vendas só para os dias depois da última venda, a partir do catálogo ativo da demo e dos clientes não excluídos, com os preços atuais. Cada dia é gerado a partir de uma semente própria (slug + data), então é reproduzível, e rodar de novo no mesmo dia não adiciona nada;
 - `--refresh` apaga API Keys, produtos, clientes e transações **somente da organização de demo** (inclusive o que visitantes criaram ou ingeriram) e gera o histórico de novo, terminando no dia atual;
-- recusa rodar se um dos e-mails de demo pertence a uma conta de outra organização, ou se o slug pertence a uma organização que não é da conta demo owner.
+- recusa rodar se um dos e-mails de demo pertence a uma conta de outra organização, ou se o slug pertence a uma organização que não é da conta demo owner;
+- com `AI_ENABLED=true`, ativa os Insights (opt-in) **somente da organização de demo**, em nome da conta owner; se um visitante desativou, o próximo start ativa de novo. Com `AI_ENABLED=false` o opt-in fica como está (o kill switch já bloqueia tudo) e nenhuma outra organização é tocada.
 
 Em produção ele roda a cada start do container (via `pulseboard:release`), sem `--refresh`. Como o Render Free hiberna após ~15 min sem tráfego, praticamente toda primeira visita sobe o container e completa os dias que faltam — o período padrão do dashboard continua com dados e comparações sem intervenção manual.
 
@@ -190,6 +191,31 @@ DB_URL='<SUPABASE_SESSION_POOLER_URL>' DB_SSLMODE=require AI_MONTHLY_BUDGET_USD=
 ```
 
 Sem `--organization`, a tabela inclui todas as organizações; a linha do orçamento é sempre global. Repita no terminal o `AI_MONTHLY_BUDGET_USD` do Render para a porcentagem bater.
+
+### Ligar os Insights com o provedor real
+
+O `render.yaml` sobe com `AI_ENABLED=false`. A chave da OpenAI é um secret: só no painel do Render (*Environment*), nunca no Git, num `.env` versionado, em fixtures, relatórios ou no front. O código não muda para ligar o provedor.
+
+| Variável | Valor | Obrigatória |
+|----------|-------|-------------|
+| `OPENAI_API_KEY` | secret (`sync: false`), chave de um projeto da OpenAI com limite de gasto configurado no painel | sim |
+| `AI_PROVIDER` | `openai` (o `scripted` é recusado com `APP_ENV=production`) | sim (já no Blueprint) |
+| `AI_MODEL` | `gpt-6-luna`; outro modelo precisa de preço em `config/ai.php` ou de `AI_PRICE_*_PER_MTOK`, senão o custo estimado fica zerado e o orçamento não segura | sim (já no Blueprint) |
+| `AI_MONTHLY_BUDGET_USD` | `2` | sim (já no Blueprint) |
+| `AI_DEMO_DAILY_IP_LIMIT` | `5` | sim (já no Blueprint) |
+| `AI_ENABLED` | `true` **só no último passo** | sim |
+| `AI_DAILY_ORG_LIMIT`, `AI_DAILY_USER_LIMIT`, `AI_REQUESTS_PER_MINUTE`, `AI_DEMO_REQUESTS_PER_MINUTE_PER_IP` | padrões `50`, `20`, `10`, `3` | não |
+| `AI_TIMEOUT_SECONDS`, `AI_DEADLINE_SECONDS`, `OPENAI_BASE_URL` | padrões `20`, `45`, `https://api.openai.com/v1` | não |
+
+Ordem:
+
+1. Com `AI_ENABLED=false`, a CI verde (inclusive o E2E com o provedor roteirizado e o `pulseboard:ai-eval --provider=scripted`).
+2. Limite de gasto mensal no painel da OpenAI, no projeto da chave.
+3. Na sua máquina, com a chave só na variável do terminal (nunca em arquivo versionado), a avaliação com o modelo real: `OPENAI_API_KEY=... php artisan pulseboard:ai-eval --provider=openai --record --repeat=3`. O relatório fica em `storage/ai-eval/reports/` (fora do Git); as fixtures gravadas em `tests/Fixtures/Ai/period_summary/` guardam só o corpo das respostas e são revisadas antes de qualquer commit. Se a avaliação falhar, o demo continua desligado; thresholds e casos não mudam para ela passar.
+4. No Render, `OPENAI_API_KEY` e então `AI_ENABLED=true`. O restart roda o `pulseboard:demo`, que ativa o opt-in só da demo (linha "Insights enabled for the demo organization." no log).
+5. Uma geração controlada na demo e a conferência em `pulseboard:ai-usage --organization=pulseboard-demo` e nos logs `event=ai.run` (tokens, custo, latência, status, sem conteúdo).
+
+Para desligar: `AI_ENABLED=false` (kill switch, efeito no restart) ou `AI_MONTHLY_BUDGET_USD=0` (bloqueia novas gerações e continua servindo o cache).
 
 ## Checklist de um novo ambiente
 

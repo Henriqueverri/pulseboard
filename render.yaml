@@ -72,7 +72,8 @@ services:
         value: demo@example.com
       - key: DEMO_MEMBER_EMAIL
         value: demo-member@example.com
-      # PulseBoard Insights: off until the key is set and the demo limits are checked (docs/ai.md).
+      # PulseBoard Insights: off until the key is set and the real-model evaluation passed
+      # (docs/deployment.md, "Ligar os Insights com o provedor real").
       - key: AI_ENABLED
         value: "false"
       - key: AI_PROVIDER
