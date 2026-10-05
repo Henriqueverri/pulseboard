@@ -1,0 +1,32 @@
+{
+    "id": "no_sales_period",
+    "description": "Período sem nenhuma transação (jan/2020): ressalvas no_sales e no_previous_data, nenhum achado positivo.",
+    "category": "quality",
+    "organization": "eval",
+    "period": { "from": "2020-01-01", "to": "2020-01-31" },
+    "scripted": [
+        {
+            "output": {
+                "headline": "Não houve vendas pagas neste período",
+                "overview": "O período não registrou nenhuma venda paga nem transações em outros status, e o período anterior também ficou sem vendas.",
+                "findings": [
+                    {
+                        "kind": "attention",
+                        "title": "Sem vendas no período",
+                        "explanation": "Sem vendas pagas, não há receita nem comparação possível.",
+                        "evidence": ["kpi.revenue", "kpi.orders"],
+                        "destination": "dashboard"
+                    }
+                ],
+                "attention_points": []
+            }
+        }
+    ],
+    "expect": {
+        "outcome": "succeeded",
+        "caveats_include": ["no_sales", "no_previous_data"],
+        "caveats_exclude": ["partial_period", "low_volume", "status_is_current"],
+        "forbidden_kinds": ["positive"]
+    },
+    "rubric": "Diz com clareza que não houve vendas e não inventa causa nem tendência."
+}

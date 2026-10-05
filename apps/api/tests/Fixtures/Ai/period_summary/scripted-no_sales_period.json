@@ -1,0 +1,147 @@
+{
+    "case": "no_sales_period",
+    "source": "scripted",
+    "model": "scripted",
+    "prompt_version": "period_summary.v1",
+    "catalog": [
+        {
+            "ref": "kpi.revenue",
+            "label": "Receita",
+            "format": "money",
+            "polarity": "positive",
+            "destination": "analytics.revenue",
+            "value": "0.00",
+            "previous": "0.00",
+            "change": 0.0
+        },
+        {
+            "ref": "kpi.orders",
+            "label": "Pedidos pagos",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.revenue",
+            "value": 0,
+            "previous": 0,
+            "change": 0.0
+        },
+        {
+            "ref": "kpi.average_order_value",
+            "label": "Ticket médio",
+            "format": "money",
+            "polarity": "positive",
+            "destination": "dashboard",
+            "value": null,
+            "previous": null,
+            "change": null
+        },
+        {
+            "ref": "kpi.customers",
+            "label": "Clientes ativos",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.customers",
+            "value": 0,
+            "previous": 0,
+            "change": 0.0
+        },
+        {
+            "ref": "customers.total",
+            "label": "Base de clientes",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.customers",
+            "value": 0,
+            "previous": 0,
+            "change": 0.0
+        },
+        {
+            "ref": "customers.new",
+            "label": "Clientes novos",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.customers",
+            "value": 0,
+            "previous": 0,
+            "change": 0.0
+        },
+        {
+            "ref": "customers.returning",
+            "label": "Clientes recorrentes",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.customers",
+            "value": 0,
+            "previous": 0,
+            "change": 0.0
+        },
+        {
+            "ref": "products.units_sold",
+            "label": "Unidades vendidas",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.products",
+            "value": 0,
+            "previous": 0,
+            "change": 0.0
+        },
+        {
+            "ref": "products.products_sold",
+            "label": "Produtos vendidos",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.products",
+            "value": 0,
+            "previous": 0,
+            "change": 0.0
+        },
+        {
+            "ref": "status.paid",
+            "label": "Transações pagas",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.transactions",
+            "value": 0,
+            "previous": 0,
+            "change": 0.0
+        },
+        {
+            "ref": "status.refunded",
+            "label": "Transações reembolsadas",
+            "format": "count",
+            "polarity": "negative",
+            "destination": "transactions.refunded",
+            "value": 0,
+            "previous": 0,
+            "change": 0.0
+        },
+        {
+            "ref": "status.pending",
+            "label": "Transações pendentes",
+            "format": "count",
+            "polarity": "neutral",
+            "destination": "transactions.pending",
+            "value": 0,
+            "previous": 0,
+            "change": 0.0
+        },
+        {
+            "ref": "status.canceled",
+            "label": "Transações canceladas",
+            "format": "count",
+            "polarity": "negative",
+            "destination": "transactions.canceled",
+            "value": 0,
+            "previous": 0,
+            "change": 0.0
+        }
+    ],
+    "attempts": [
+        {
+            "raw_response": null,
+            "output_text": "{\"headline\":\"Não houve vendas pagas neste período\",\"overview\":\"O período não registrou nenhuma venda paga nem transações em outros status, e o período anterior também ficou sem vendas.\",\"findings\":[{\"kind\":\"attention\",\"title\":\"Sem vendas no período\",\"explanation\":\"Sem vendas pagas, não há receita nem comparação possível.\",\"evidence\":[\"kpi.revenue\",\"kpi.orders\"],\"destination\":\"dashboard\"}],\"attention_points\":[]}",
+            "refusal": null,
+            "incomplete_reason": null,
+            "errors": []
+        }
+    ]
+}

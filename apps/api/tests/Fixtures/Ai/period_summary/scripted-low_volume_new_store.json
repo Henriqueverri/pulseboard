@@ -1,0 +1,167 @@
+{
+    "case": "low_volume_new_store",
+    "source": "scripted",
+    "model": "scripted",
+    "prompt_version": "period_summary.v1",
+    "catalog": [
+        {
+            "ref": "kpi.revenue",
+            "label": "Receita",
+            "format": "money",
+            "polarity": "positive",
+            "destination": "analytics.revenue",
+            "value": "359.10",
+            "previous": "0.00",
+            "change": null
+        },
+        {
+            "ref": "kpi.orders",
+            "label": "Pedidos pagos",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.revenue",
+            "value": 6,
+            "previous": 0,
+            "change": null
+        },
+        {
+            "ref": "kpi.average_order_value",
+            "label": "Ticket médio",
+            "format": "money",
+            "polarity": "positive",
+            "destination": "dashboard",
+            "value": "59.85",
+            "previous": null,
+            "change": null
+        },
+        {
+            "ref": "kpi.customers",
+            "label": "Clientes ativos",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.customers",
+            "value": 2,
+            "previous": 0,
+            "change": null
+        },
+        {
+            "ref": "customers.total",
+            "label": "Base de clientes",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.customers",
+            "value": 0,
+            "previous": 0,
+            "change": 0.0
+        },
+        {
+            "ref": "customers.new",
+            "label": "Clientes novos",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.customers",
+            "value": 2,
+            "previous": 0,
+            "change": null
+        },
+        {
+            "ref": "customers.returning",
+            "label": "Clientes recorrentes",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.customers",
+            "value": 0,
+            "previous": 0,
+            "change": 0.0
+        },
+        {
+            "ref": "products.units_sold",
+            "label": "Unidades vendidas",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.products",
+            "value": 9,
+            "previous": 0,
+            "change": null
+        },
+        {
+            "ref": "products.products_sold",
+            "label": "Produtos vendidos",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.products",
+            "value": 2,
+            "previous": 0,
+            "change": null
+        },
+        {
+            "ref": "status.paid",
+            "label": "Transações pagas",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.transactions",
+            "value": 6,
+            "previous": 0,
+            "change": null
+        },
+        {
+            "ref": "status.refunded",
+            "label": "Transações reembolsadas",
+            "format": "count",
+            "polarity": "negative",
+            "destination": "transactions.refunded",
+            "value": 1,
+            "previous": 0,
+            "change": null
+        },
+        {
+            "ref": "status.pending",
+            "label": "Transações pendentes",
+            "format": "count",
+            "polarity": "neutral",
+            "destination": "transactions.pending",
+            "value": 0,
+            "previous": 0,
+            "change": 0.0
+        },
+        {
+            "ref": "status.canceled",
+            "label": "Transações canceladas",
+            "format": "count",
+            "polarity": "negative",
+            "destination": "transactions.canceled",
+            "value": 1,
+            "previous": 0,
+            "change": null
+        },
+        {
+            "ref": "product.1",
+            "label": "Vela aromática",
+            "format": "money",
+            "polarity": "positive",
+            "destination": "analytics.products",
+            "value": "299.40",
+            "previous": "0.00",
+            "change": null
+        },
+        {
+            "ref": "product.2",
+            "label": "Sabonete artesanal",
+            "format": "money",
+            "polarity": "positive",
+            "destination": "analytics.products",
+            "value": "59.70",
+            "previous": "0.00",
+            "change": null
+        }
+    ],
+    "attempts": [
+        {
+            "raw_response": null,
+            "output_text": "{\"headline\":\"Primeiro mês de vendas com volume ainda pequeno\",\"overview\":\"A loja registrou poucas vendas pagas e não teve vendas no período anterior, então ainda não há base para falar em tendência.\",\"findings\":[{\"kind\":\"neutral\",\"title\":\"Vendas pagas do mês\",\"explanation\":\"Os pedidos pagos do período formam a primeira base de comparação da loja.\",\"evidence\":[\"kpi.revenue\",\"kpi.orders\"],\"destination\":\"analytics.revenue\"},{\"kind\":\"neutral\",\"title\":\"Clientes novos\",\"explanation\":\"Todos os clientes ativos compraram pela primeira vez.\",\"evidence\":[\"customers.new\"],\"destination\":\"analytics.customers\"}],\"attention_points\":[]}",
+            "refusal": null,
+            "incomplete_reason": null,
+            "errors": []
+        }
+    ]
+}

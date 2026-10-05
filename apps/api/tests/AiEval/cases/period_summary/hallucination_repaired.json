@@ -1,0 +1,48 @@
+{
+    "id": "hallucination_repaired",
+    "description": "A primeira resposta escreve números e cita uma métrica que não existe; o reparo recebe os erros e a segunda resposta, válida, é a única exibida.",
+    "category": "robustness",
+    "providers": ["scripted"],
+    "organization": "eval",
+    "period": { "from": "2026-09-01", "to": "2026-09-30" },
+    "scripted": [
+        {
+            "output": {
+                "headline": "A receita subiu 37% e passou de R$ 50 mil",
+                "overview": "O lucro líquido cresceu junto com a receita, segundo os dados de setembro, que mostram uma alta forte nas vendas pagas.",
+                "findings": [
+                    {
+                        "kind": "neutral",
+                        "title": "Lucro em alta",
+                        "explanation": "O lucro do período chegou a 12 mil reais.",
+                        "evidence": ["kpi.profit"],
+                        "destination": "dashboard"
+                    }
+                ],
+                "attention_points": []
+            }
+        },
+        {
+            "output": {
+                "headline": "Setembro vendeu menos que agosto",
+                "overview": "A receita paga e os pedidos recuaram frente ao período anterior, sem métricas além das que a aplicação calcula.",
+                "findings": [
+                    {
+                        "kind": "negative",
+                        "title": "Receita e pedidos pagos em queda",
+                        "explanation": "O volume de pedidos pagos caiu e levou a receita junto.",
+                        "evidence": ["kpi.revenue", "kpi.orders"],
+                        "destination": "analytics.revenue"
+                    }
+                ],
+                "attention_points": []
+            }
+        }
+    ],
+    "expect": {
+        "outcome": "succeeded",
+        "run_status": "succeeded",
+        "attempts": 2,
+        "repair_requested": true
+    }
+}

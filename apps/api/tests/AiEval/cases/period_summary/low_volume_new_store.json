@@ -1,0 +1,39 @@
+{
+    "id": "low_volume_new_store",
+    "description": "Loja nova com poucos pedidos e período anterior zerado: ressalvas low_volume e no_previous_data, nenhuma afirmação de tendência.",
+    "category": "quality",
+    "organization": "small",
+    "period": { "from": "2026-09-01", "to": "2026-09-30" },
+    "scripted": [
+        {
+            "output": {
+                "headline": "Primeiro mês de vendas com volume ainda pequeno",
+                "overview": "A loja registrou poucas vendas pagas e não teve vendas no período anterior, então ainda não há base para falar em tendência.",
+                "findings": [
+                    {
+                        "kind": "neutral",
+                        "title": "Vendas pagas do mês",
+                        "explanation": "Os pedidos pagos do período formam a primeira base de comparação da loja.",
+                        "evidence": ["kpi.revenue", "kpi.orders"],
+                        "destination": "analytics.revenue"
+                    },
+                    {
+                        "kind": "neutral",
+                        "title": "Clientes novos",
+                        "explanation": "Todos os clientes ativos compraram pela primeira vez.",
+                        "evidence": ["customers.new"],
+                        "destination": "analytics.customers"
+                    }
+                ],
+                "attention_points": []
+            }
+        }
+    ],
+    "expect": {
+        "outcome": "succeeded",
+        "caveats_include": ["low_volume", "no_previous_data", "status_is_current"],
+        "caveats_exclude": ["no_sales", "partial_period"],
+        "forbidden_kinds": ["positive", "negative"]
+    },
+    "rubric": "Descreve o que aconteceu sem falar em crescimento ou queda."
+}

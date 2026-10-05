@@ -1,0 +1,47 @@
+{
+    "id": "known_period",
+    "description": "Mês fechado com histórico completo: o resumo cita só métricas do catálogo, sem algarismos e com a direção coerente.",
+    "category": "quality",
+    "organization": "eval",
+    "period": { "from": "2026-09-01", "to": "2026-09-30" },
+    "scripted": [
+        {
+            "output": {
+                "headline": "Setembro vendeu menos que agosto, mas com ticket médio maior",
+                "overview": "A receita paga e os pedidos recuaram frente a agosto, que teve uma semana promocional. Cada pedido rendeu um pouco mais, e o segundo produto do ranking ganhou força.",
+                "findings": [
+                    {
+                        "kind": "negative",
+                        "title": "Receita e pedidos pagos em queda",
+                        "explanation": "O volume de pedidos pagos caiu e levou a receita junto.",
+                        "evidence": ["kpi.revenue", "kpi.orders"],
+                        "destination": "analytics.revenue"
+                    },
+                    {
+                        "kind": "positive",
+                        "title": "Ticket médio em alta",
+                        "explanation": "Os pedidos pagos do mês tiveram valor médio maior.",
+                        "evidence": ["kpi.average_order_value"],
+                        "destination": "dashboard"
+                    },
+                    {
+                        "kind": "positive",
+                        "title": "Segundo produto do ranking acelerou",
+                        "explanation": "A receita desse produto cresceu bastante em relação a agosto.",
+                        "evidence": ["product.2"],
+                        "destination": "analytics.products"
+                    }
+                ],
+                "attention_points": [
+                    { "text": "Os reembolsos aumentaram; vale revisar as transações reembolsadas.", "evidence": ["status.refunded"] }
+                ]
+            }
+        }
+    ],
+    "expect": {
+        "outcome": "succeeded",
+        "caveats_include": ["status_is_current"],
+        "caveats_exclude": ["partial_period", "no_sales", "no_previous_data", "low_volume"]
+    },
+    "rubric": "Aponta a queda de receita e pedidos frente a agosto, o ticket médio maior e a alta de reembolsos."
+}

@@ -1,0 +1,207 @@
+{
+    "case": "direction_incoherent_repaired",
+    "source": "scripted",
+    "model": "scripted",
+    "prompt_version": "period_summary.v1",
+    "catalog": [
+        {
+            "ref": "kpi.revenue",
+            "label": "Receita",
+            "format": "money",
+            "polarity": "positive",
+            "destination": "analytics.revenue",
+            "value": "92623.40",
+            "previous": "107475.50",
+            "change": -13.8
+        },
+        {
+            "ref": "kpi.orders",
+            "label": "Pedidos pagos",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.revenue",
+            "value": 133,
+            "previous": 159,
+            "change": -16.4
+        },
+        {
+            "ref": "kpi.average_order_value",
+            "label": "Ticket médio",
+            "format": "money",
+            "polarity": "positive",
+            "destination": "dashboard",
+            "value": "696.42",
+            "previous": "675.95",
+            "change": 3.0
+        },
+        {
+            "ref": "kpi.customers",
+            "label": "Clientes ativos",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.customers",
+            "value": 48,
+            "previous": 48,
+            "change": 0.0
+        },
+        {
+            "ref": "customers.total",
+            "label": "Base de clientes",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.customers",
+            "value": 70,
+            "previous": 70,
+            "change": 0.0
+        },
+        {
+            "ref": "customers.new",
+            "label": "Clientes novos",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.customers",
+            "value": 1,
+            "previous": 4,
+            "change": -75.0
+        },
+        {
+            "ref": "customers.returning",
+            "label": "Clientes recorrentes",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.customers",
+            "value": 47,
+            "previous": 44,
+            "change": 6.8
+        },
+        {
+            "ref": "products.units_sold",
+            "label": "Unidades vendidas",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.products",
+            "value": 296,
+            "previous": 385,
+            "change": -23.1
+        },
+        {
+            "ref": "products.products_sold",
+            "label": "Produtos vendidos",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.products",
+            "value": 32,
+            "previous": 39,
+            "change": -17.9
+        },
+        {
+            "ref": "status.paid",
+            "label": "Transações pagas",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.transactions",
+            "value": 133,
+            "previous": 159,
+            "change": -16.4
+        },
+        {
+            "ref": "status.refunded",
+            "label": "Transações reembolsadas",
+            "format": "count",
+            "polarity": "negative",
+            "destination": "transactions.refunded",
+            "value": 12,
+            "previous": 8,
+            "change": 50.0
+        },
+        {
+            "ref": "status.pending",
+            "label": "Transações pendentes",
+            "format": "count",
+            "polarity": "neutral",
+            "destination": "transactions.pending",
+            "value": 7,
+            "previous": 2,
+            "change": 250.0
+        },
+        {
+            "ref": "status.canceled",
+            "label": "Transações canceladas",
+            "format": "count",
+            "polarity": "negative",
+            "destination": "transactions.canceled",
+            "value": 9,
+            "previous": 12,
+            "change": -25.0
+        },
+        {
+            "ref": "product.1",
+            "label": "Teclado mecânico Essential",
+            "format": "money",
+            "polarity": "positive",
+            "destination": "analytics.products",
+            "value": "15743.70",
+            "previous": "15243.90",
+            "change": 3.3
+        },
+        {
+            "ref": "product.2",
+            "label": "Cadeira ergonômica Essential",
+            "format": "money",
+            "polarity": "positive",
+            "destination": "analytics.products",
+            "value": "12598.60",
+            "previous": "4499.50",
+            "change": 180.0
+        },
+        {
+            "ref": "product.3",
+            "label": "Cadeira ergonômica Pro",
+            "format": "money",
+            "polarity": "positive",
+            "destination": "analytics.products",
+            "value": "10849.30",
+            "previous": "10849.30",
+            "change": 0.0
+        },
+        {
+            "ref": "product.4",
+            "label": "Mesa regulável Essential",
+            "format": "money",
+            "polarity": "positive",
+            "destination": "analytics.products",
+            "value": "8999.40",
+            "previous": "14777.00",
+            "change": -39.1
+        },
+        {
+            "ref": "product.5",
+            "label": "Monitor 24\" Pro",
+            "format": "money",
+            "polarity": "positive",
+            "destination": "analytics.products",
+            "value": "7349.30",
+            "previous": "7349.30",
+            "change": 0.0
+        }
+    ],
+    "attempts": [
+        {
+            "raw_response": null,
+            "output_text": "{\"headline\":\"Setembro foi um mês de crescimento nas vendas\",\"overview\":\"A receita paga avançou sobre agosto, enquanto os cancelamentos preocupam por terem mudado de patamar no período.\",\"findings\":[{\"kind\":\"positive\",\"title\":\"Receita em alta\",\"explanation\":\"A receita paga cresceu sobre agosto.\",\"evidence\":[\"kpi.revenue\"],\"destination\":\"analytics.revenue\"},{\"kind\":\"negative\",\"title\":\"Cancelamentos\",\"explanation\":\"Os cancelamentos mudaram de patamar.\",\"evidence\":[\"status.canceled\"],\"destination\":\"transactions.canceled\"}],\"attention_points\":[]}",
+            "refusal": null,
+            "incomplete_reason": null,
+            "errors": [
+                "findings[0] is positive but cites kpi.revenue, which fell and has positive polarity.",
+                "findings[1] is negative but cites status.canceled, which fell and has negative polarity."
+            ]
+        },
+        {
+            "raw_response": null,
+            "output_text": "{\"headline\":\"Setembro vendeu menos, mas cancelou menos\",\"overview\":\"A receita paga recuou frente a agosto, e os cancelamentos também diminuíram, o que é uma boa notícia para a operação.\",\"findings\":[{\"kind\":\"negative\",\"title\":\"Receita em queda\",\"explanation\":\"A receita paga ficou abaixo de agosto.\",\"evidence\":[\"kpi.revenue\"],\"destination\":\"analytics.revenue\"},{\"kind\":\"positive\",\"title\":\"Menos cancelamentos\",\"explanation\":\"Os cancelamentos diminuíram em relação a agosto.\",\"evidence\":[\"status.canceled\"],\"destination\":\"transactions.canceled\"}],\"attention_points\":[]}",
+            "refusal": null,
+            "incomplete_reason": null,
+            "errors": []
+        }
+    ]
+}

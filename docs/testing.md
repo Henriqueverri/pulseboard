@@ -62,6 +62,20 @@ docker exec pulseboard-postgres createdb -U pulseboard pulseboard_test
 DB_DATABASE=pulseboard_test php artisan test
 ```
 
+## Avaliação de IA
+
+Fora do PHPUnit: um comando que roda os casos de `tests/AiEval/cases` pelo serviço real do resumo, num SQLite em memória próprio (não toca no banco do `.env`), e grava um relatório em `storage/ai-eval/reports/`. Detalhes dos casos e avaliadores em [ai.md](ai.md#avaliação-do-resumo-implementada).
+
+```bash
+cd apps/api
+php artisan pulseboard:ai-eval                         # provedor roteirizado: determinístico, sem rede (o que a CI roda)
+php artisan pulseboard:ai-eval --case=known_period     # um caso
+php artisan pulseboard:ai-eval --provider=openai --model=gpt-6-luna --repeat=3   # modelo real: exige OPENAI_API_KEY e custa dinheiro
+php artisan pulseboard:ai-eval --provider=openai --record                        # grava as respostas reais como fixtures dos testes de parsing
+```
+
+O comando sai com código 1 se algum caso falhar ou se uma métrica ficar abaixo do threshold, e se recusa a rodar com `APP_ENV=production`.
+
 ## Web
 
 ```bash
@@ -105,7 +119,7 @@ E2E_API_URL=http://localhost:8001/api/v1 bun run test:e2e
 
 | Job | O que valida |
 |-----|--------------|
-| `api` | `composer install`, Pint, `migrate` em PostgreSQL 16 limpo, PHPUnit completo em PostgreSQL (sem os skips do SQLite) |
+| `api` | `composer install`, Pint, `migrate` em PostgreSQL 16 limpo, PHPUnit completo em PostgreSQL (sem os skips do SQLite), avaliação de IA com o provedor roteirizado |
 | `web` | `bun install --frozen-lockfile`, lint, typecheck, Vitest, `nuxt generate` |
 | `e2e` | PostgreSQL descartável com `migrate:fresh` + `pulseboard:demo` (`DEMO_PASSWORD` aleatória por execução, mascarada nos logs) → API (`artisan serve`) → build estático (`serve:static`) → Playwright (smoke + fluxo de integração com axe); logs e traces como artefato em caso de falha |
 
