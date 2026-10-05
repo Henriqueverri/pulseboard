@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api\Concerns;
 
 use App\Enums\TransactionSource;
+use App\Enums\TransactionStatus;
 use App\Models\ApiKey;
 use App\Models\Customer;
 use App\Models\Organization;
@@ -42,8 +43,12 @@ trait InteractsWithIngestApi
         return $plainTextKey === null ? $this : $this->withToken($plainTextKey);
     }
 
-    protected function createIngestedTransaction(Organization $organization, string $externalId, ?ApiKey $apiKey = null): Transaction
-    {
+    protected function createIngestedTransaction(
+        Organization $organization,
+        string $externalId,
+        ?ApiKey $apiKey = null,
+        TransactionStatus $status = TransactionStatus::Paid,
+    ): Transaction {
         $customer = Customer::factory()->for($organization)->create(['external_id' => "cus-{$externalId}"]);
         $product = Product::factory()->for($organization)->create(['external_id' => "prd-{$externalId}"]);
 
@@ -53,6 +58,7 @@ trait InteractsWithIngestApi
             ->has(TransactionItem::factory()->for($product)->state(['quantity' => 2, 'unit_price' => '49.90']), 'items')
             ->create([
                 'external_id' => $externalId,
+                'status' => $status,
                 'source' => TransactionSource::Ingest,
                 'api_key_id' => $apiKey?->id,
             ]);

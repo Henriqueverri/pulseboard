@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\HealthController;
+use App\Http\Controllers\Api\Ingest\IngestStatusChangeController;
 use App\Http\Controllers\Api\Ingest\IngestTransactionController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\ProductController;
@@ -54,5 +55,6 @@ Route::prefix('v1')->group(function (): void {
     Route::prefix('ingest')->middleware(['api-key', 'throttle:ingest'])->group(function (): void {
         Route::post('/transactions', [IngestTransactionController::class, 'store']);
         Route::get('/transactions/{externalId}', [IngestTransactionController::class, 'show']);
+        Route::post('/transactions/{externalId}/status-changes', IngestStatusChangeController::class);
     });
 });

@@ -31,4 +31,12 @@ final class IngestionException extends RuntimeException
     {
         return new self($message, $code, Response::HTTP_CONFLICT);
     }
+
+    /**
+     * A resource of another organization is indistinguishable from a missing one.
+     */
+    public static function notFound(string $message): self
+    {
+        return new self($message, 'not_found', Response::HTTP_NOT_FOUND);
+    }
 }
