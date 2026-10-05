@@ -34,6 +34,13 @@ describe('buildBreadcrumbs', () => {
     ])
   })
 
+  it('labels the insights settings page', () => {
+    expect(buildBreadcrumbs('/settings/insights', null)).toEqual([
+      { label: 'Configurações', to: '/settings/api-keys' },
+      { label: 'Insights' },
+    ])
+  })
+
   it('points the analytics crumb at its first tab', () => {
     expect(buildBreadcrumbs('/analytics/products', null)).toEqual([
       { label: 'Analytics', to: '/analytics/revenue' },

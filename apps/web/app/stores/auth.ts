@@ -73,6 +73,16 @@ export const useAuthStore = defineStore('auth', {
       writeOrganizationCookie(organization.id)
     },
 
+    /** Applies an organization returned by a mutation (e.g. the insights opt-in) to the session. */
+    updateOrganization(organization: Organization) {
+      const merge = (current: Organization) => ({ ...current, ...organization })
+
+      this.organizations = this.organizations.map(item => (item.id === organization.id ? merge(item) : item))
+      if (this.organization?.id === organization.id) {
+        this.organization = merge(this.organization)
+      }
+    },
+
     /** The selected organization was rejected (membership removed): fall back to the API default. */
     async recoverOrganization() {
       this.organization = null
