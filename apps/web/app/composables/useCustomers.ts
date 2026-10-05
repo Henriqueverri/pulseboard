@@ -41,6 +41,9 @@ export function changedCustomerFields(customer: Customer, input: CustomerInput):
   if (input.email.toLowerCase() !== customer.email.toLowerCase()) {
     changes.email = input.email
   }
+  if (input.external_id !== customer.external_id) {
+    changes.external_id = input.external_id
+  }
 
   return changes
 }

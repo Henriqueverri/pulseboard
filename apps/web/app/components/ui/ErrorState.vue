@@ -7,9 +7,12 @@ withDefaults(defineProps<{
   compact?: boolean
   retrying?: boolean
   retryable?: boolean
+  /** `X-Request-Id` of the failed request, for support. */
+  requestId?: string | null
 }>(), {
   title: 'Não foi possível carregar os dados',
   message: undefined,
+  requestId: null,
   compact: false,
   retrying: false,
   retryable: true,
@@ -40,6 +43,12 @@ const emit = defineEmits<{ retry: [] }>()
         class="mt-1 text-xs text-ink/65"
       >
         {{ message }}
+      </p>
+      <p
+        v-if="requestId"
+        class="mt-2 text-[11px] text-ink/65"
+      >
+        ID da requisição: <span class="select-all font-mono">{{ requestId }}</span>
       </p>
     </div>
     <UiButton

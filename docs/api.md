@@ -2,11 +2,22 @@
 
 Contratos da API REST do PulseBoard (`/api/v1`). Visão geral do projeto no [README](../README.md); decisões por trás destas regras em [`architecture.md`](architecture.md).
 
+A API tem duas superfícies com autenticações separadas:
+
+- **API interna**, usada pelo front: sessão Sanctum (cookie + CSRF) e `X-Organization-Id`. É o que este documento descreve.
+- **API de ingestão** (`/api/v1/ingest/*`), usada por sistemas externos: autenticada só por API Key. Guia completo em [`integration.md`](integration.md); resumo em [Ingestão](#ingestão).
+
+Seções:
+
 - [Autenticação](#autenticação-sanctum-spa)
 - [Products e Customers](#products-e-customers)
-- [Transactions](#transactions-read-only)
+- [Transactions](#transactions)
+- [API Keys](#api-keys)
+- [Ingestão](#ingestão)
 - [Analytics — regras comuns](#analytics--regras-comuns)
 - [Dashboard](#dashboard) · [Revenue](#revenue-analytics) · [Products](#product-analytics) · [Customers](#customer-analytics) · [Transaction status](#transaction-status-analytics)
+
+**Em todas as respostas de `api/*`:** header `X-Request-Id` (o valor recebido, se tiver de 8 a 64 caracteres em `A-Z a-z 0-9 . _ -`, ou um UUID gerado), que também vai em todas as linhas de log da requisição. O CORS expõe `X-Request-Id` e `Retry-After` ao front, que mostra o ID nos estados de erro.
 
 ## Autenticação (Sanctum SPA)
 
@@ -43,27 +54,30 @@ Rotas de domínio exigem sessão autenticada + `X-Organization-Id` de uma organi
 - Registro de outra organização → 404. Header de organização sem membership → 403.
 - `DELETE` é restrito a `owner`. Sem histórico (nenhuma venda/transação) o registro é removido; com histórico é feito soft delete e as transações permanecem intactas.
 - SKU e e-mail são únicos por organização **incluindo registros soft-deleted** (o índice único não é parcial). E-mails são normalizados para minúsculas.
+- **`external_id`** (opcional, `null` por padrão): o ID do registro no sistema integrado, com até 128 caracteres em `A-Z a-z 0-9 . _ : -`, único por organização incluindo soft-deleted. Aceito no `POST`/`PATCH` e devolvido nas respostas. Na ingestão, o cliente é reconhecido por ele; o produto é reconhecido pelo SKU.
 
-## Transactions (read-only)
+## Transactions
 
-Transactions são registros históricos (gerados pelo seed ou pelo `pulseboard:demo`) e **não podem ser criadas, alteradas ou removidas pela API** — só existem `GET /transactions` e `GET /transactions/{id}`; outros métodos retornam 405.
+A API interna é **somente leitura** para transações: só existem `GET /transactions` e `GET /transactions/{id}`; outros métodos retornam 405. As transações vêm de duas origens, indicadas em `source`: `seed` (geradas pelo seed ou pelo `pulseboard:demo`) e `ingest` (recebidas pela [API de ingestão](integration.md), que é o único caminho de escrita).
 
 | Filtro | Formato | Regra |
 |--------|---------|-------|
 | `status` | `paid`, `refunded`, `pending`, `canceled` | Sem filtro, todos os status são retornados |
-| `q` | texto | UUID → match exato no id da transaction; outro texto → nome ou e-mail do customer (case-insensitive) |
+| `q` | texto | Sempre `external_id` exato; além disso, UUID → id da transaction, outro texto → nome ou e-mail do customer (case-insensitive) |
 | `customer_id` | UUID | Customer de outra organização resulta em lista vazia |
 | `from` / `to` | `YYYY-MM-DD` | Dias do calendário na timezone da Organization (`organizations.timezone`, padrão `America/Sao_Paulo`): `from` = início do dia, `to` = fim do dia; `from` > `to` → 422 |
 | `page` / `per_page` | inteiro | `per_page` 1–100, padrão 15 |
 
-Ordenação: `occurred_at` desc, depois `id` desc. A listagem traz `customer` e `items_count`; o detalhe traz `customer` e `items` com `product`. Customers/products soft-deleted continuam aparecendo no histórico com `is_deleted: true`. `unit_price` é o preço no momento da venda. `total_amount`, `unit_price` e `line_total` são strings com 2 casas.
+Ordenação: `occurred_at` desc, depois `id` desc. A listagem traz `external_id` (`null` nas transações da demo), `source`, `customer` e `items_count`; o detalhe traz também `items` com `product` e `status_history`. Customers/products soft-deleted continuam aparecendo no histórico com `is_deleted: true`. `unit_price` é o preço no momento da venda. `total_amount`, `unit_price` e `line_total` são strings com 2 casas.
+
+- **`status_history`:** as mudanças de status na ordem do ciclo de vida (a cadeia que começa em `from_status: null`, não a ordem de timestamps). Cada item tem `from_status`, `to_status`, `occurred_at` (horário de negócio informado pela origem), `recorded_at` (quando o PulseBoard gravou) e `source`. A cadeia sempre termina no `status` atual. As transações anteriores ao histórico receberam um backfill: `null → status`, e as `refunded`/`canceled` ganharam o passo intermediário (`paid`/`pending`) no mesmo `occurred_at`, porque a data real é desconhecida.
 
 - **Compatível com analytics:** `from` / `to` usam o mesmo calendário local dos endpoints de analytics. Com os mesmos `from` / `to`, `meta.total` com `status=paid` é igual a `orders` do `/dashboard`, e sem filtro de status é igual à soma de `orders` de `/analytics/transactions`.
 - **Tenant e permissões:** transação de outra organização → 404; header sem membership → 403; owner e member podem ler.
-- **Consultas:** número fixo por request (listagem: contagem, página com `items_count` e customers; detalhe: transação, customer, itens e produtos), independente do número de resultados ou de itens.
+- **Consultas:** número fixo por request (listagem: contagem, página com `items_count` e customers; detalhe: transação, customer, itens, produtos e histórico de status), independente do número de resultados ou de itens.
 
 ```http
-GET /api/v1/transactions?status=paid&from=2026-09-01&to=2026-09-30&q=maria&per_page=20
+GET /api/v1/transactions?q=order_1002
 X-Organization-Id: {organization-uuid}
 Accept: application/json
 ```
@@ -72,16 +86,18 @@ Accept: application/json
 {
   "data": [
     {
-      "id": "9d1c…",
-      "status": "paid",
-      "total_amount": "159.50",
-      "occurred_at": "2026-09-15T14:32:00.000000Z",
-      "items_count": 2,
-      "customer": { "id": "9d1b…", "name": "Maria Souza", "email": "maria@example.com", "is_deleted": false }
+      "id": "2b9faad1…",
+      "external_id": "order_1002",
+      "source": "ingest",
+      "status": "refunded",
+      "total_amount": "114.90",
+      "occurred_at": "2026-10-04T18:00:00.000000Z",
+      "items_count": 1,
+      "customer": { "id": "01a1099b…", "name": "Ana Souza", "email": "ana.souza.17@example.com", "is_deleted": false }
     }
   ],
-  "links": { "first": "…?page=1", "last": "…?page=1", "prev": null, "next": null },
-  "meta": { "current_page": 1, "per_page": 20, "total": 1, "last_page": 1 }
+  "links": { "first": "…?q=order_1002&page=1", "last": "…?q=order_1002&page=1", "prev": null, "next": null },
+  "meta": { "current_page": 1, "per_page": 15, "total": 1, "last_page": 1 }
 }
 ```
 
@@ -90,23 +106,85 @@ Accept: application/json
 ```json
 {
   "data": {
-    "id": "9d1c…",
-    "status": "paid",
-    "total_amount": "159.50",
-    "occurred_at": "2026-09-15T14:32:00.000000Z",
-    "customer": { "id": "9d1b…", "name": "Maria Souza", "email": "maria@example.com", "is_deleted": false },
+    "id": "2b9faad1…",
+    "external_id": "order_1002",
+    "source": "ingest",
+    "status": "refunded",
+    "total_amount": "114.90",
+    "occurred_at": "2026-10-04T18:00:00.000000Z",
+    "customer": { "id": "01a1099b…", "name": "Ana Souza", "email": "ana.souza.17@example.com", "is_deleted": false },
     "items": [
       {
-        "id": "9d1d…",
-        "quantity": 2,
-        "unit_price": "49.90",
-        "line_total": "99.80",
-        "product": { "id": "9d1a…", "name": "Mouse sem fio Pro", "sku": "PB-1234-ab", "is_deleted": false }
+        "id": "81198409…",
+        "quantity": 1,
+        "unit_price": "114.90",
+        "line_total": "114.90",
+        "product": { "id": "01a1099b…", "name": "Mouse sem fio Pro", "sku": "PB-001-PRO", "is_deleted": false }
       }
+    ],
+    "status_history": [
+      { "from_status": null, "to_status": "pending", "occurred_at": "2026-10-04T18:00:00.000000Z", "recorded_at": "2026-10-05T01:12:23.000000Z", "source": "ingest" },
+      { "from_status": "pending", "to_status": "paid", "occurred_at": "2026-10-04T18:05:00.000000Z", "recorded_at": "2026-10-05T01:12:23.000000Z", "source": "ingest" },
+      { "from_status": "paid", "to_status": "refunded", "occurred_at": "2026-10-04T21:00:00.000000Z", "recorded_at": "2026-10-05T01:12:24.000000Z", "source": "ingest" }
     ]
   }
 }
 ```
+
+## API Keys
+
+Chaves que autenticam sistemas externos na API de ingestão. Rotas da API interna (sessão + `X-Organization-Id`):
+
+| Método | Rota | Quem | Resposta |
+|--------|------|------|----------|
+| `GET` | `/api/v1/api-keys` | owner e member | 200, todas as chaves da organização (inclusive revogadas e expiradas), mais recentes primeiro, sem paginação |
+| `POST` | `/api/v1/api-keys` | owner | 201 com a chave em texto puro, uma única vez |
+| `DELETE` | `/api/v1/api-keys/{id}` | owner | 204; revoga (idempotente) e mantém o registro para auditoria |
+
+**Criação:** `{"name": "Loja virtual", "expires_in_days": 90}`.
+
+- `name`: obrigatório, até 100 caracteres.
+- `expires_in_days`: `30`, `90`, `365` ou `null`/ausente (sem expiração); outro valor → 422.
+- `organization_id`, `prefix` e `secret_hash` no payload → 422: a organização vem do contexto e a chave é gerada no servidor.
+- **Organização de demo** (slug `pulseboard-demo`): toda chave expira em 24 horas, qualquer que seja o `expires_in_days`.
+- **Limite:** 10 chaves ativas por organização; a 11ª → 422 com `errors.api_keys`. A contagem é serializada por lock na organização, então criações simultâneas não passam do limite.
+
+```json
+{
+  "data": {
+    "id": "01a1099d…",
+    "name": "Loja virtual",
+    "prefix": "Ab12Cd34Ef56",
+    "status": "active",
+    "created_by": { "id": "01a1099b…", "name": "Demo Owner" },
+    "last_used_at": null,
+    "expires_at": "2026-10-06T01:10:46.000000Z",
+    "revoked_at": null,
+    "created_at": "2026-10-05T01:10:46.000000Z",
+    "plain_text_key": "pb_<prefix>_<secret>"
+  }
+}
+```
+
+- `plain_text_key` só existe na resposta do `POST`, que é enviada com `Cache-Control: no-store`. Nenhum endpoint devolve o segredo ou o hash depois disso.
+- `status` é derivado: `active`, `revoked` (tem `revoked_at`) ou `expired` (`expires_at` no passado). Chave revogada ou expirada recebe 401 na ingestão.
+- `created_by` é `null` se o usuário criador foi removido.
+- `last_used_at` é atualizado na autenticação, no máximo uma vez por minuto por chave.
+- Chave de outra organização → 404; member em `POST`/`DELETE` → 403 (`"This action requires the owner role."`).
+
+## Ingestão
+
+Rotas autenticadas **só** por `Authorization: Bearer pb_<prefix>_<secret>`: sem sessão, cookie, CSRF ou `X-Organization-Id` (a organização vem da chave; o header é ignorado). Limite de 120 requisições por minuto por chave.
+
+| Método | Rota | Respostas |
+|--------|------|-----------|
+| `POST` | `/api/v1/ingest/transactions` | 201 criada (`Location`), 200 reenvio idêntico (`Idempotent-Replayed: true`), 409, 422 |
+| `GET` | `/api/v1/ingest/transactions/{external_id}` | 200 ou 404 `not_found` |
+| `POST` | `/api/v1/ingest/transactions/{external_id}/status-changes` | 201 aplicada, 200 já no status, 404, 409 `invalid_transition`, 422 |
+
+Erros sempre com `message` e `code` estável (`invalid_api_key`, `validation_failed`, `currency_mismatch`, `total_mismatch`, `transaction_conflict`, `customer_email_conflict`, `invalid_transition`, `not_found`, `rate_limited`); 422 com `errors` por campo. As rotas internas recusam o Bearer da integração (401): as duas credenciais não se misturam.
+
+Payload, regras de validação, idempotência, retry, reconciliação, lifecycle e exemplos executados: [`integration.md`](integration.md).
 
 ## Analytics — regras comuns
 
@@ -144,7 +222,7 @@ Todos são somente leitura (`GET`/`HEAD`; outros métodos → 405) e seguem as m
 
 **Limitações conhecidas:**
 
-- O status usado é o **atual** da transação: um estorno ou cancelamento posterior muda retroativamente os números do período em que a venda ocorreu (não há histórico de mudanças de status).
+- O status usado é o **atual** da transação: um estorno ou cancelamento posterior muda retroativamente os números do período em que a venda ocorreu. O histórico de status já é gravado (`status_history`), mas o analytics ainda não o usa para reconhecer o estorno na data do estorno.
 - O período padrão inclui o dia de hoje, ainda incompleto.
 - SQLite (suíte rápida de testes) não tem base de timezones: os buckets do Revenue usam o offset fixo do início do período (exato para `America/Sao_Paulo`, sem horário de verão); os testes de DST dos buckets rodam só no PostgreSQL. Os limites de período dos demais endpoints são calculados na aplicação e são exatos nos dois bancos.
 - Sem cache: cada request consulta o banco.

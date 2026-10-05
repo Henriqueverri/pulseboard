@@ -1,5 +1,8 @@
 <?php
 
+use App\Exceptions\IngestionException;
+use App\Http\Middleware\AssignRequestId;
+use App\Http\Middleware\AuthenticateApiKey;
 use App\Http\Middleware\EnsureOrganizationContext;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
@@ -7,6 +10,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Routing\Middleware\ThrottleRequests;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -19,14 +23,23 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
 
+        $middleware->prepend(AssignRequestId::class);
+
         $middleware->alias([
             'organization' => EnsureOrganizationContext::class,
+            'api-key' => AuthenticateApiKey::class,
         ]);
 
         // Tenant-scoped route model binding needs the organization context resolved first.
         $middleware->prependToPriorityList(
             before: SubstituteBindings::class,
             prepend: EnsureOrganizationContext::class,
+        );
+
+        // The ingest rate limiter is keyed by the authenticated API key.
+        $middleware->prependToPriorityList(
+            before: ThrottleRequests::class,
+            prepend: AuthenticateApiKey::class,
         );
 
         // API-only app: there is no login page, unauthenticated requests get a JSON 401.
@@ -36,6 +49,19 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request): bool => $request->is('api/*') || $request->expectsJson(),
         );
+
+        $exceptions->render(function (IngestionException $exception, Request $request) {
+            $body = [
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+            ];
+
+            if ($exception->errors !== []) {
+                $body['errors'] = $exception->errors;
+            }
+
+            return response()->json($body, $exception->httpStatus);
+        });
 
         // The default message names the Eloquent model class.
         $exceptions->render(function (NotFoundHttpException $exception, Request $request) {

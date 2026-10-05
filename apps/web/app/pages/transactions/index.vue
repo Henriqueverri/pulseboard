@@ -11,7 +11,8 @@ const columns: DataColumn[] = [
   { key: 'occurred_at', label: 'Data' },
   { key: 'customer', label: 'Cliente', hideBelow: 'md' },
   { key: 'status', label: 'Status', hideBelow: 'sm' },
-  { key: 'items_count', label: 'Itens', align: 'right', hideBelow: 'lg' },
+  { key: 'source', label: 'Origem', hideBelow: 'lg' },
+  { key: 'items_count', label: 'Itens', align: 'right', hideBelow: 'xl' },
   { key: 'total_amount', label: 'Total', align: 'right' },
   { key: 'open', label: 'Abrir', srOnlyLabel: true, class: 'w-10' },
 ]
@@ -28,7 +29,7 @@ const customerName = computed(() => {
   <div>
     <PageHeader
       title="Transações"
-      description="Pedidos registrados na organização. Datas no fuso da organização."
+      description="Pedidos da organização, gerados pela demo ou recebidos pela API de ingestão. Datas no fuso da organização."
     />
 
     <UiCard padding="none">
@@ -79,6 +80,24 @@ const customerName = computed(() => {
             >
               Removido
             </UiTag>
+          </div>
+          <div class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 lg:hidden">
+            <TransactionSourceTag :source="row.source" />
+            <span
+              v-if="row.external_id"
+              class="max-w-[8.5rem] truncate font-mono text-[11px] text-ink/65"
+              :title="row.external_id"
+            >{{ row.external_id }}</span>
+          </div>
+        </template>
+        <template #cell-source="{ row }">
+          <div class="flex min-w-0 flex-col items-start gap-1">
+            <TransactionSourceTag :source="row.source" />
+            <span
+              v-if="row.external_id"
+              class="max-w-[180px] truncate font-mono text-[11px] text-ink/65"
+              :title="row.external_id"
+            >{{ row.external_id }}</span>
           </div>
         </template>
         <template #cell-customer="{ row }">

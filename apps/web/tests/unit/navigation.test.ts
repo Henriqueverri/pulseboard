@@ -27,6 +27,13 @@ describe('buildBreadcrumbs', () => {
     expect(buildBreadcrumbs('/customers/0199-abc', null).at(-1)).toEqual({ label: 'Detalhe' })
   })
 
+  it('points the settings crumb at the API keys page', () => {
+    expect(buildBreadcrumbs('/settings/api-keys', null)).toEqual([
+      { label: 'Configurações', to: '/settings/api-keys' },
+      { label: 'API Keys' },
+    ])
+  })
+
   it('points the analytics crumb at its first tab', () => {
     expect(buildBreadcrumbs('/analytics/products', null)).toEqual([
       { label: 'Analytics', to: '/analytics/revenue' },

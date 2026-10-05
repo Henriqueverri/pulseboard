@@ -12,9 +12,9 @@ const open = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ saved: [customer: Customer, mode: 'created' | 'updated'] }>()
 
 const mutations = useCustomerMutations()
-const { fieldErrors, formError, capture, clear, reset } = useFormErrors(['name', 'email'] as const)
+const { fieldErrors, formError, capture, clear, reset } = useFormErrors(['name', 'email', 'external_id'] as const)
 
-const form = reactive({ name: '', email: '' })
+const form = reactive({ name: '', email: '', externalId: '' })
 const pending = ref(false)
 const isEdit = computed(() => props.customer !== null)
 
@@ -26,11 +26,12 @@ watch(open, (value) => {
   reset()
   form.name = props.customer?.name ?? ''
   form.email = props.customer?.email ?? ''
+  form.externalId = props.customer?.external_id ?? ''
 }, { immediate: true })
 
 async function onSubmit() {
   reset()
-  const input: CustomerInput = { name: form.name.trim(), email: form.email.trim() }
+  const input: CustomerInput = { name: form.name.trim(), email: form.email.trim(), external_id: form.externalId.trim() || null }
 
   pending.value = true
   try {
@@ -111,6 +112,26 @@ async function onSubmit() {
           :invalid="invalid"
           :described-by="describedBy"
           @update:model-value="clear('email')"
+        />
+      </UiFormField>
+
+      <UiFormField
+        v-slot="{ id, describedBy, invalid }"
+        label="ID externo"
+        optional
+        hint="ID do cliente no seu sistema. A API de ingestão reconhece o cliente por ele."
+        :error="fieldErrors.external_id"
+      >
+        <UiInput
+          :id="id"
+          v-model="form.externalId"
+          maxlength="128"
+          autocomplete="off"
+          spellcheck="false"
+          class="font-mono"
+          :invalid="invalid"
+          :described-by="describedBy"
+          @update:model-value="clear('external_id')"
         />
       </UiFormField>
     </form>

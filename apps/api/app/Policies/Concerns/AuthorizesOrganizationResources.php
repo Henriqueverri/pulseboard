@@ -14,11 +14,19 @@ use Illuminate\Database\Eloquent\Model;
  */
 trait AuthorizesOrganizationResources
 {
-    protected function allowMember(User $user): Response
+    protected function allowMember(User $user, ?string $requiredRole = null): Response
     {
-        return $this->roleInCurrentOrganization($user) === null
-            ? Response::deny('You do not have access to this organization.')
-            : Response::allow();
+        $role = $this->roleInCurrentOrganization($user);
+
+        if ($role === null) {
+            return Response::deny('You do not have access to this organization.');
+        }
+
+        if ($requiredRole !== null && $role !== $requiredRole) {
+            return Response::deny("This action requires the {$requiredRole} role.");
+        }
+
+        return Response::allow();
     }
 
     /**

@@ -8,6 +8,7 @@ Este documento explica **por que** o PulseBoard é construído do jeito que é. 
 flowchart LR
   B[Navegador] --> W["Nuxt 4 SPA (estático)<br/>Cloudflare Pages"]
   W -- "REST + cookie de sessão<br/>(Sanctum SPA, CSRF)" --> A["API Laravel 12<br/>Render · Docker"]
+  X["Sistema externo<br/>(loja, ERP)"] -- "POST /ingest/*<br/>Bearer API Key" --> A
   A --> D[("PostgreSQL<br/>Supabase")]
 ```
 
@@ -27,9 +28,12 @@ erDiagram
   organizations ||--o{ products : has
   organizations ||--o{ customers : has
   organizations ||--o{ transactions : has
+  organizations ||--o{ api_keys : issues
   customers ||--o{ transactions : places
   transactions ||--o{ transaction_items : contains
+  transactions ||--o{ transaction_status_changes : history
   products ||--o{ transaction_items : sold_in
+  api_keys |o--o{ transactions : ingested
 ```
 
 - UUID como chave primária em todas as tabelas de domínio.
@@ -37,6 +41,10 @@ erDiagram
 - `organizations.timezone` (IANA, padrão `America/Sao_Paulo`) define o calendário de negócio; timestamps sempre em UTC.
 - `transaction_items.unit_price` e `line_total` guardam o preço **no momento da venda** — mudar o preço do produto não reescreve o histórico.
 - Produtos e clientes com histórico recebem soft delete; SKU e e-mail continuam únicos por organização, incluindo registros removidos.
+- `external_id` (nullable) em clientes, produtos e transações: o ID do registro no sistema integrado, com `UNIQUE (organization_id, external_id)` nas três tabelas (NULLs não conflitam). Em `transactions`, esse índice é a garantia de idempotência da ingestão.
+- `transactions.source` (`seed` ou `ingest`) indica a origem; `transactions.api_key_id` registra qual chave criou a transação.
+- `transactions.status` é o estado atual, denormalizado para o analytics; `transaction_status_changes` guarda a cadeia completa de mudanças, com `UNIQUE (transaction_id, to_status)`.
+- `api_keys` guarda o `prefix` público (único) e só o `secret_hash` (SHA-256), nunca a chave.
 
 ## Autenticação: Sanctum SPA
 
@@ -100,6 +108,101 @@ Medido com `EXPLAIN ANALYZE` no PostgreSQL 16, num banco descartável com 200 mi
 
 O índice candidato `(organization_id, status, occurred_at)` foi medido antes e depois e **descartado**: sem ganho material nas analytics (o gargalo em períodos longos é o sort), com custo de espaço e escrita. Para organizações muito maiores, o caminho seria pré-agregação ou cache, não esse índice.
 
+## Ingestão de transações
+
+Sistemas externos enviam vendas pela API de ingestão (`/api/v1/ingest/*`), uma transação por requisição, de forma síncrona. Contrato e guia do integrador em [`integration.md`](integration.md).
+
+```mermaid
+sequenceDiagram
+  participant Ext as Sistema externo
+  participant MW as AuthenticateApiKey
+  participant Req as IngestTransactionRequest
+  participant Svc as TransactionIngestionService
+  participant DB as PostgreSQL
+  Ext->>MW: POST /ingest/transactions (Bearer pb_...)
+  MW->>DB: api_keys por prefix; sha256 comparado com hash_equals
+  MW->>MW: registra CurrentOrganization e a chave no request
+  MW->>Req: validação de formato (sem banco)
+  Req->>Svc: payload normalizado + fingerprint
+  Svc->>DB: BEGIN; produtos por SKU (um whereIn); cliente por external_id ou insert
+  Svc->>DB: INSERT transaction (unique organization_id + external_id)
+  alt violação da unique
+    DB-->>Svc: 23505, ROLLBACK
+    Svc->>DB: lê a existente e compara o fingerprint
+    Svc-->>Ext: 200 replay ou 409 transaction_conflict
+  else inserida
+    Svc->>DB: INSERT dos itens (multi-row) + status change; COMMIT
+    Svc-->>Ext: 201 Created
+  end
+```
+
+### Duas superfícies de autenticação
+
+| | API interna (front) | API de ingestão (sistemas externos) |
+|---|---|---|
+| Credencial | Sessão Sanctum em cookie httpOnly + CSRF | `Authorization: Bearer` com API Key |
+| Organização | Header `X-Organization-Id`, validado contra a membership | A própria chave; o header é ignorado |
+| Autorização | Policies por papel (owner/member) | Chave válida e da organização; não há usuário |
+| Rate limit | Login e cadastro | 120 req/min por chave |
+
+As duas não se misturam: o Bearer da integração nas rotas internas recebe 401 (o Sanctum foi configurado para não procurar tokens, já que a API é só SPA), e a sessão não autentica a ingestão. O middleware da chave registra o mesmo `CurrentOrganization` da API interna, então escopos de tenant, bindings e services são reaproveitados sem código novo.
+
+### API Keys
+
+| Alternativa | Por que não |
+|-------------|-------------|
+| Tokens do Sanctum | O guard `auth:sanctum` das rotas internas aceitaria o token como se fosse um usuário: a credencial de integração vazaria para a superfície interna |
+| JWT | Não se revoga sem uma denylist, não registra uso e não carrega nada de que a ingestão precise |
+| **Chave opaca com lookup no banco** | **Escolhida:** revogação instantânea, `last_used_at`, prefixo público para logs e UI |
+
+- **Formato `pb_<prefix>_<secret>`:** 12 caracteres públicos (identificam a chave sem expor o segredo) e 40 de segredo, cerca de 238 bits gerados com `random_bytes`. O prefixo `pb_` permite secret scanning.
+- **SHA-256, não bcrypt:** com essa entropia não há brute force viável, e um hash lento custaria dezenas de milissegundos em toda requisição sem proteger nada. Bcrypt existe para senhas de baixa entropia. A comparação usa `hash_equals`.
+- **Exibida uma vez:** só a resposta do `POST /api-keys` (com `Cache-Control: no-store`) traz o texto puro. O front a mantém só na memória do componente, nunca em cache, store, storage ou URL, e a descarta ao fechar o diálogo.
+- **Revogação sem exclusão:** `revoked_at` mantém a linha para auditoria e para o vínculo `transactions.api_key_id`.
+- **401 genérico:** chave ausente, malformada, desconhecida, com segredo errado, revogada ou expirada recebem a mesma resposta; o motivo real vai só para o log (com o prefixo, nunca o segredo).
+- **Owner cria e revoga, member só vê;** no máximo 10 ativas por organização, com a contagem serializada por lock na organização.
+- **Demo sem chave pública:** nenhuma chave é criada pelo seed, pelo `pulseboard:demo` ou pelo deploy. Quem testa a demo cria a própria, e na organização de demo toda chave expira em 24 horas; o `--refresh` apaga as chaves e as transações ingeridas.
+
+### Idempotência e concorrência
+
+- **Chave natural, não header:** o `external_id` da venda, com `UNIQUE (organization_id, external_id)`. Um `Idempotency-Key` separado seria uma segunda fonte de verdade para o mesmo recurso. O escopo é a organização, não a chave, para que trocar de chave não abra brecha para duplicatas.
+- **Insert-first:** o service tenta o `INSERT` direto, sem `SELECT` antes. Retry e corrida percorrem o mesmo caminho: a violação da unique. Depois do rollback (no PostgreSQL, um erro aborta a transação inteira), a existente é lida e o fingerprint decide entre **200** (`Idempotent-Replayed: true`) e **409** `transaction_conflict`.
+- **Fingerprint:** SHA-256 do payload canônico (`external_id`, `occurred_at` em UTC, moeda, status inicial, `customer.external_id` e itens ordenados por SKU, com quantidade e centavos). Nome e e-mail do cliente ficam de fora porque nunca alteram um cliente existente.
+- **Na corrida,** a requisição B bloqueia no índice único até A fazer commit e então recebe a violação, caindo no replay; se A fizer rollback, B é inserida. Nenhum lock explícito é necessário na criação.
+- **Cliente novo concorrente:** `createOrFirst` com savepoint. Uma violação no `external_id` relê o existente; uma violação no e-mail com outro `external_id` vira 409 `customer_email_conflict` e nada é persistido.
+- **Fronteira transacional:** começa depois da validação de formato (que não segura conexão) e termina no insert do status change; uma falha no meio não deixa cliente órfão.
+- **Dinheiro sem float:** os valores chegam como string decimal e são convertidos direto para centavos; número JSON é rejeitado. O total é calculado no servidor; o `total_amount` enviado serve só de conferência (422 `total_mismatch`).
+
+`IngestConcurrencyTest` (só no PostgreSQL, com conexões e commits concorrentes de verdade) prova que requisições simultâneas com o mesmo `external_id` geram uma única transação.
+
+### Lifecycle da transação
+
+```text
+pending ──► paid ──► refunded
+   │
+   └──────► canceled
+```
+
+- **A máquina de estados vive no enum** (`TransactionStatus::canTransitionTo()`, `isFinal()`, `allowedOnCreate()`): a ingestão cria só `pending` ou `paid`; estorno e cancelamento são transições posteriores.
+- **`TransactionLifecycle`** é o único lugar que muda status depois da criação: `lockForUpdate` na transação, valida a transição e a cronologia (`occurred_at` não pode ser anterior à mudança anterior), atualiza `transactions.status` e grava o status change na mesma transação de banco. O lock explícito existe só aqui, porque é o único read-modify-write.
+- **Status denormalizado + histórico:** o analytics lê `transactions.status` (barato); o histórico serve para auditoria e para a linha do tempo da UI. Os testes de criação, de transição e do backfill verificam que o status atual é sempre o fim da cadeia do histórico.
+- **O banco também protege a máquina:** como nenhum estado é revisitado, `UNIQUE (transaction_id, to_status)` impede uma transição duplicada mesmo que o lock falhe.
+- **Ordem do histórico pela cadeia,** a partir de `from_status: null`, e não por timestamp: duas mudanças podem ter o mesmo `occurred_at` (é o caso do backfill dos dados antigos).
+- **Mudança de status como recurso** (`POST …/status-changes`), não `PATCH` no campo: 201 aplicada, 200 se já está no status pedido, 409 `invalid_transition`.
+
+### Síncrono, não assíncrono
+
+Uma transação é processada em poucos milissegundos, e o integrador precisa da resposta (201, 200 ou 409) para decidir se repete. Uma fila exigiria um worker (o Render Free não tem) e devolveria 202 sem garantia de processamento, o que pioraria a semântica de idempotência para quem integra. O gatilho concreto para processamento assíncrono seria um endpoint de lote ou importação de CSV; o driver de fila em banco já está configurado.
+
+### Observabilidade e limites
+
+- **`X-Request-Id`** em toda resposta de `api/*` (aceita o do cliente, se bem formado, ou gera um UUID) e em todas as linhas de log da requisição, via `Log::shareContext`.
+- **Uma linha de log por requisição de ingestão** (`event` `ingest.transaction` ou `ingest.status_change`), com `outcome` (`created`, `replayed`, `conflict`, `rejected`, `transitioned`), organização, chave (id e prefixo), `external_id`, `http_status`, `code` e `duration_ms`. Falhas de autenticação saem em `warning` com o motivo. Nunca são logados a chave, o header `Authorization`, o hash, o payload inteiro nem dados pessoais do cliente.
+- **Logs em JSON em produção** (`LOG_STDERR_FORMATTER`), um objeto por linha, filtráveis por `request_id`, `event` ou `code` no painel do Render.
+- **Roteiro de investigação:** o integrador informa o `request_id` ou o `external_id`; o log mostra o resultado e o `code`; a transação aparece na busca da UI pelo `external_id`, com a linha do tempo de status; o `last_used_at` da chave completa o quadro.
+- **Número fixo de consultas na criação,** independente do número de itens: chave, produtos num único `whereIn`, cliente, insert da transação, um insert multi-row dos itens e o status change. `IngestQueryBudgetTest` compara 1 e 100 itens.
+- **Limites:** 120 req/min por chave (rate limiter no cache em banco, 429 com `Retry-After`), 100 itens por transação, 2 MB de corpo no Nginx.
+
 ## Timezone
 
 "Hoje", "este mês" e "semana passada" dependem de onde o negócio está, não de onde o servidor roda.
@@ -121,11 +224,14 @@ página/componente → composable → repository → useApiClient
 - **Estado na URL:** filtros, paginação, período, granularidade, ordenação e limite vivem na query string — links compartilháveis e voltar/avançar funcionam.
 - **Pinia só para a sessão**; dados de tela via `useAsyncData` com chave por organização, mantendo os dados anteriores visíveis durante o refetch.
 - **UI própria** sobre primitivos headless acessíveis (reka-ui) e tokens de design em CSS; gráficos com Chart.js carregados sob demanda (chunk separado do bundle inicial), cada um com tabela equivalente para leitores de tela.
-- **Acessibilidade:** axe-core sem violações nas telas principais (390 px e 1440 px); Lighthouse medido localmente no build estático com 100 em acessibilidade e boas práticas.
+- **Erros da API visíveis:** `message`, `code` e `errors` da API viram mensagens e erros por campo; 403 explica a falta de permissão, 429 respeita o `Retry-After` e os estados de erro mostram o `X-Request-Id` para suporte.
+- **Segredos:** a API Key recém-criada fica só na memória do componente do diálogo, nunca em `useAsyncData`, Pinia, storage, URL ou logs, e é descartada ao fechar.
+- **Acessibilidade:** axe-core sem violações nas telas principais (390 px e 1440 px), e a página de API Keys verificada pelo E2E a cada execução (desktop, mobile e diálogo do segredo aberto); Lighthouse medido localmente no build estático com 100 em acessibilidade e boas práticas.
 
 ## Infraestrutura
 
-- **Sem Redis, filas ou workers:** nada é assíncrono hoje; sessão e cache ficam no banco. Menos peças para operar em planos gratuitos.
+- **Sem Redis, filas ou workers:** nada é assíncrono hoje (inclusive a ingestão); sessão, cache e o rate limiter da ingestão ficam no banco. Menos peças para operar em planos gratuitos; o rate limiter é o primeiro ponto em que Redis passaria a se justificar com volume.
+- **Logs estruturados:** `stderr` em JSON, lidos no painel do Render; sem stack de observabilidade separada.
 - **Deploy pelas integrações nativas** das plataformas, sem workflow de deploy próprio: a CI valida, as plataformas publicam. A API só é publicada depois dos checks da CI.
 - **Migrations no start do container**, sob advisory lock do PostgreSQL (o Render Free não tem pre-deploy command). Se falhar, o container não sobe e a versão anterior continua no ar.
 
@@ -133,7 +239,18 @@ Detalhes operacionais em [`deployment.md`](deployment.md).
 
 ## Limitações conhecidas
 
-- O status considerado é o **atual** da transação: um estorno posterior muda retroativamente o período da venda original (não há histórico de status).
+- O analytics considera o status **atual** da transação: um estorno posterior muda retroativamente o período da venda original. O histórico de status já existe; usá-lo para reconhecer o estorno na data do estorno é a próxima evolução.
+- O backfill do histórico das transações antigas usa o `occurred_at` da venda como data do estorno ou cancelamento, porque a data real não existe.
 - O período padrão (últimos 30 dias) inclui o dia de hoje, ainda incompleto.
 - Sem cache de analytics: cada requisição consulta o banco.
 - Um único ambiente (produção), sem staging.
+
+Trade-offs aceitos na ingestão:
+
+- Unicidade por organização: um integrador com várias origens precisa usar namespaces nos IDs (`loja:1001`).
+- A ingestão nunca atualiza um cliente existente: dados divergentes ficam com a versão do PulseBoard.
+- Não há vínculo automático por e-mail: o 409 `customer_email_conflict` obriga um vínculo explícito pela UI.
+- Sem lote nem processamento assíncrono: volumes altos viram N requisições, sob o rate limit.
+- A demo não oferece uma chave pronta: testar a ingestão exige criar a própria chave, em troca de nenhum segredo publicado.
+- Os logs são a única trilha das requisições; não há tabela de log de ingestão.
+- O rate limiter no cache em banco faz escritas extras por requisição, aceitável no volume da demo.

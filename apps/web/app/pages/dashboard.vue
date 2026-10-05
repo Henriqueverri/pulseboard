@@ -35,6 +35,13 @@ const customerItems = computed(() => customerRankingItems(customers.data.value?.
     <PageHeader title="Dashboard">
       <template #description>
         <span class="tabular">{{ caption }}</span>
+        <span class="mt-0.5 block text-xs">
+          Indicadores calculados pela API a partir das transações pagas, da demo ou recebidas pela
+          <NuxtLink
+            to="/settings/api-keys"
+            class="font-medium text-ink underline-offset-2 hover:underline"
+          >integração por API</NuxtLink>.
+        </span>
       </template>
       <template #actions>
         <PeriodFilter :period="period" />

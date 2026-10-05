@@ -37,6 +37,7 @@ class CustomerResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'email' => $this->email,
+            'external_id' => $this->external_id,
             $this->mergeWhen($this->metrics !== null, fn () => [
                 'orders_count' => $this->metrics['orders_count'],
                 'total_spent' => $this->metrics['total_spent'],

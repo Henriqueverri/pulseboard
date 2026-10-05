@@ -165,6 +165,72 @@ class CustomerApiTest extends TestCase
             ->assertJsonValidationErrors(['email']);
     }
 
+    public function test_external_id_is_optional_and_can_be_set_changed_and_cleared(): void
+    {
+        $this->actingInOrganization($this->owner, $this->organization)
+            ->postJson('/api/v1/customers', ['name' => 'Walk-in', 'email' => 'walkin@example.com'])
+            ->assertCreated()
+            ->assertJsonPath('data.external_id', null);
+
+        $id = $this->postJson('/api/v1/customers', ['name' => 'Ana Lima', 'email' => 'ana@example.com', 'external_id' => 'cus_987'])
+            ->assertCreated()
+            ->assertJsonPath('data.external_id', 'cus_987')
+            ->json('data.id');
+
+        $this->getJson("/api/v1/customers/{$id}")->assertOk()->assertJsonPath('data.external_id', 'cus_987');
+        $this->getJson('/api/v1/customers?q=Ana')->assertOk()->assertJsonPath('data.0.external_id', 'cus_987');
+
+        $this->patchJson("/api/v1/customers/{$id}", ['external_id' => 'shop:cus-1'])
+            ->assertOk()
+            ->assertJsonPath('data.external_id', 'shop:cus-1');
+
+        $this->patchJson("/api/v1/customers/{$id}", ['name' => 'Ana P. Lima'])
+            ->assertOk()
+            ->assertJsonPath('data.external_id', 'shop:cus-1');
+
+        $this->patchJson("/api/v1/customers/{$id}", ['external_id' => null])
+            ->assertOk()
+            ->assertJsonPath('data.external_id', null);
+
+        $this->assertDatabaseHas('customers', ['id' => $id, 'external_id' => null]);
+    }
+
+    public function test_external_id_format_is_validated(): void
+    {
+        $this->actingInOrganization($this->owner, $this->organization);
+
+        foreach (['has space', 'cus#1', str_repeat('c', 129), 123] as $index => $invalid) {
+            $this->postJson('/api/v1/customers', ['name' => 'Bad', 'email' => "bad{$index}@example.com", 'external_id' => $invalid])
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors(['external_id']);
+        }
+    }
+
+    public function test_external_id_is_unique_within_the_organization_including_deleted_customers(): void
+    {
+        Customer::factory()->for($this->organization)->create(['external_id' => 'cus_1']);
+        Customer::factory()->for($this->organization)->create(['external_id' => 'cus_old'])->delete();
+        Customer::factory()->for(Organization::factory())->create(['external_id' => 'cus_shared']);
+        $customer = Customer::factory()->for($this->organization)->create(['external_id' => 'cus_2']);
+
+        $this->actingInOrganization($this->owner, $this->organization);
+
+        foreach (['cus_1', 'cus_old'] as $index => $taken) {
+            $this->postJson('/api/v1/customers', ['name' => 'Copy', 'email' => "copy{$index}@example.com", 'external_id' => $taken])
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors(['external_id']);
+        }
+
+        $this->patchJson("/api/v1/customers/{$customer->id}", ['external_id' => 'cus_1'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['external_id']);
+
+        $this->patchJson("/api/v1/customers/{$customer->id}", ['external_id' => 'cus_2'])->assertOk();
+
+        $this->postJson('/api/v1/customers', ['name' => 'Mine', 'email' => 'mine@example.com', 'external_id' => 'cus_shared'])
+            ->assertCreated();
+    }
+
     public function test_show_returns_customer_with_paid_metrics_and_recent_transactions(): void
     {
         $customer = Customer::factory()->for($this->organization)->create();

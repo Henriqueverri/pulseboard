@@ -132,4 +132,15 @@ describe('useApiClient', () => {
 
     await expect(apiFetch('/products')).rejects.toMatchObject({ status: 0 })
   })
+
+  it('keeps the error code, Retry-After and request id of a failed response', async () => {
+    const headers = new Headers({ 'Retry-After': '17', 'X-Request-Id': 'req-abcdef12' })
+    fetchMock.mockRejectedValueOnce(Object.assign(fetchError(429, { message: 'Too many requests.', code: 'rate_limited' }), { response: { headers } }))
+    const { apiFetch } = useApiClient()
+
+    const error = await apiFetch('/products').catch((rawError: unknown) => rawError)
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error).toMatchObject({ status: 429, code: 'rate_limited', retryAfter: 17, requestId: 'req-abcdef12' })
+  })
 })

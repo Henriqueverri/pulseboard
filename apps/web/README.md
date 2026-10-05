@@ -31,7 +31,7 @@ Variáveis (`.env`):
 
 As URLs da API são embutidas no HTML durante o `generate`: defina as variáveis no ambiente de build.
 
-O smoke e2e entra com a conta owner criada por `php artisan pulseboard:demo`: `DEMO_OWNER_EMAIL` (padrão `demo@example.com`) e `DEMO_PASSWORD`, lidos do ambiente (`E2E_EMAIL` / `E2E_PASSWORD` sobrescrevem; sem senha o teste falha logo). Cria e remove um produto `E2E smoke <timestamp>` e aceita `E2E_BASE_URL` para apontar para outro host. Rode-o contra um banco descartável com a demo (passo a passo em [`docs/testing.md`](../../docs/testing.md#e2e-playwright)). Usa o Chrome instalado (`channel: 'chrome'`, ou `E2E_CHANNEL`).
+Os testes e2e entram com a conta owner criada por `php artisan pulseboard:demo`: `DEMO_OWNER_EMAIL` (padrão `demo@example.com`) e `DEMO_PASSWORD`, lidos do ambiente (`E2E_EMAIL` / `E2E_PASSWORD` sobrescrevem; sem senha o teste falha logo). O smoke cria e remove um produto `E2E smoke <timestamp>`; o fluxo de integração cria uma API Key pela UI, ingere uma transação em `E2E_API_URL` (padrão `http://localhost:8000/api/v1`), revoga a chave e roda o axe na página de API Keys. `E2E_BASE_URL` aponta para outro host do front. Rode-o contra um banco descartável com a demo (passo a passo em [`docs/testing.md`](../../docs/testing.md#e2e-playwright)). Usa o Chrome instalado (`channel: 'chrome'`, ou `E2E_CHANNEL`).
 
 Deploy (Cloudflare Pages) e requisitos de domínio: [`docs/deployment.md`](../../docs/deployment.md). Decisões de arquitetura do front: [`docs/architecture.md`](../../docs/architecture.md#frontend).
 
@@ -52,7 +52,9 @@ Fluxo de dados: **página/componente → composable → repository → `useApiCl
 
 - **`useApiClient`**: `credentials: 'include'`, header `X-Organization-Id`, busca o cookie CSRF sob demanda antes da primeira mutação e repete a requisição uma vez em 419. Erros são normalizados (`utils/api-error.ts`); 401 limpa a sessão e redireciona para `/login?redirect=…`; 422 vira erros por campo nos formulários (`useFormErrors`).
 - **Sessão**: nenhum token no `localStorage`. A organização ativa é lembrada em cookie (só o id) e validada contra `/auth/me`. Trocar de organização descarta os dados em cache e volta ao dashboard.
-- **Permissões**: `usePermissions` esconde ações exclusivas de owner (exclusão). A API continua sendo a autoridade.
+- **Permissões**: `usePermissions` esconde ações exclusivas de owner (exclusão, criar e revogar API Keys). A API continua sendo a autoridade.
+- **Erros da API**: `message`, `code` e `errors` viram mensagens em português e erros por campo; 403 explica a falta de permissão, 429 mostra o tempo do `Retry-After` e os estados de erro exibem o `X-Request-Id`.
+- **Segredos**: a API Key recém-criada fica só na memória do diálogo que a exibe, nunca em `useAsyncData`, Pinia, storage ou URL, e é descartada ao fechar.
 - **Estado na URL**: busca, filtros, paginação, período (`?period=7d|30d|90d|12m|mtd|last-month` ou `?from=&to=`), granularidade, ordenação e limite dos rankings vivem na query string, então dá para compartilhar links e usar voltar/avançar.
 - **Carregamento**: `useAsyncData` com chave estável por organização. Ao mudar filtros, os dados anteriores ficam visíveis (esmaecidos) até a nova resposta, sem piscar skeleton.
 
@@ -67,7 +69,8 @@ Fluxo de dados: **página/componente → composable → repository → `useApiCl
 | `/analytics/customers` | Novos vs recorrentes e ranking por receita ou pedidos |
 | `/analytics/transactions` | Distribuição por status (inclui não pagos) |
 | `/products`, `/customers` | Listagem, busca, CRUD em diálogo, detalhe com métricas; exclusão só para owner |
-| `/transactions` | Somente leitura: filtros por status, busca, cliente e período; detalhe com itens |
+| `/transactions` | Somente leitura: filtros por status, busca (inclusive por ID externo), cliente e período; origem (Demo ou Integração); detalhe com itens, identificação e linha do tempo de status |
+| `/settings/api-keys` | Lista de chaves (todos); criar com exibição única do segredo e revogar (owner); guia de integração com placeholders |
 
 Regras da API refletidas na UI: dinheiro chega como string decimal e é formatado com a moeda da organização; datas seguem a timezone da organização; `change: null` aparece como "sem base de comparação"; entidades removidas aparecem no histórico sem link.
 
@@ -77,7 +80,7 @@ Chart.js via `vue-chartjs`, em componentes `*.client.vue` carregados com `Lazy*`
 
 ## Acessibilidade e qualidade
 
-- axe-core sem violações nas páginas principais (390 px e 1440 px); contraste mínimo de texto secundário `ink/65`.
+- axe-core sem violações nas páginas principais (390 px e 1440 px); a página de API Keys é verificada pelo e2e a cada execução, inclusive com o diálogo do segredo aberto. Contraste mínimo de texto secundário `ink/65`.
 - Skip link, foco preso e devolvido em diálogos/drawers, menus operáveis por teclado, tabelas com overflow viram região rolável focável.
 - Lighthouse (build estático): desktop 100 em performance; mobile 93–95; acessibilidade e boas práticas 100.
 
@@ -85,4 +88,4 @@ Chart.js via `vue-chartjs`, em componentes `*.client.vue` carregados com `Lazy*`
 
 - `tests/unit`: utilitários puros (dinheiro, datas, períodos, comparação, analytics, navegação).
 - `tests/nuxt`: composables e páginas montadas no ambiente Nuxt, com os repositories mockados (`vi.mock`) usando fixtures no formato das respostas reais da API.
-- `tests/e2e`: smoke Playwright contra a API real.
+- `tests/e2e`: Playwright contra a API real: smoke do fluxo principal e fluxo de integração (chave → ingestão → linha do tempo → revogação), com axe.

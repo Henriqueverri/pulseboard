@@ -4,23 +4,29 @@ namespace Tests\Feature;
 
 use App\Console\Commands\DemoCommand;
 use App\Enums\ProductStatus;
+use App\Enums\TransactionSource;
 use App\Enums\TransactionStatus;
+use App\Models\ApiKey;
 use App\Models\Customer;
 use App\Models\Organization;
 use App\Models\Product;
 use App\Models\Transaction;
 use App\Models\TransactionItem;
+use App\Models\TransactionStatusChange;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Database\Seeders\DemoDataSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\Feature\Api\Concerns\InteractsWithOrganizationApi;
+use Tests\Feature\Domain\Concerns\AssertsStatusHistory;
 use Tests\TestCase;
 
 class DemoCommandTest extends TestCase
 {
+    use AssertsStatusHistory;
     use InteractsWithOrganizationApi;
     use RefreshDatabase;
 
@@ -250,6 +256,132 @@ class DemoCommandTest extends TestCase
         $this->assertSame(40, $organization->products()->count());
     }
 
+    public function test_never_creates_api_keys_on_create_extend_or_refresh(): void
+    {
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+        $this->assertSame(0, ApiKey::query()->count());
+
+        $this->travel(30)->days();
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+        $this->assertSame(0, ApiKey::query()->count());
+
+        $this->artisan('pulseboard:demo', ['--refresh' => true])->assertSuccessful();
+        $this->assertSame(0, ApiKey::query()->count());
+    }
+
+    public function test_refresh_removes_the_demo_keys_but_a_plain_rerun_keeps_them(): void
+    {
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+        $demo = Organization::query()->sole();
+        $visitorKey = ApiKey::factory()->for($demo)->create();
+        $otherKey = ApiKey::factory()->for(Organization::factory())->create();
+
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+        $this->assertModelExists($visitorKey);
+
+        $this->artisan('pulseboard:demo', ['--refresh' => true])->assertSuccessful();
+        $this->assertModelMissing($visitorKey);
+        $this->assertModelExists($otherKey);
+    }
+
+    public function test_extended_and_refreshed_sales_keep_source_and_status_history(): void
+    {
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+        $organization = Organization::query()->sole();
+        $seeded = $organization->transactions()->pluck('id');
+
+        $this->travel(30)->days();
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+
+        $this->assertGreaterThan(0, $organization->transactions()->whereNotIn('id', $seeded)->count());
+        $this->assertSame(0, $organization->transactions()->where('source', '!=', TransactionSource::Seed)->count());
+        $this->assertStatusHistoryMatchesCurrentStatus();
+
+        $this->artisan('pulseboard:demo', ['--refresh' => true])->assertSuccessful();
+
+        $this->assertSame(0, TransactionStatusChange::query()->whereIn('transaction_id', $seeded)->count());
+        $this->assertStatusHistoryMatchesCurrentStatus();
+        $this->assertSame(0, $organization->products()->whereNull('external_id')->count());
+        $this->assertSame(0, $organization->customers()->whereNull('external_id')->count());
+    }
+
+    public function test_rerun_fills_the_external_ids_of_a_demo_seeded_before_they_existed(): void
+    {
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+        $organization = Organization::query()->sole();
+        $expected = $this->externalIds($organization);
+        $this->clearExternalIds($organization);
+
+        $before = $this->demoState($organization);
+        $analytics = $this->analyticsResponses($organization);
+
+        $this->artisan('pulseboard:demo')
+            ->expectsOutput('Filled the missing external ids of 110 demo products and customers.')
+            ->assertSuccessful();
+
+        $this->assertSame($expected, $this->externalIds($organization), 'same ids as a fresh seed');
+        $this->assertEquals($this->withoutExternalIds($before), $this->withoutExternalIds($this->demoState($organization)), 'nothing else changed');
+        $this->assertSame($analytics, $this->analyticsResponses($organization));
+        $this->assertStatusHistoryMatchesCurrentStatus();
+        $this->assertSame(0, ApiKey::query()->count());
+
+        $afterBackfill = $this->demoState($organization);
+
+        $this->artisan('pulseboard:demo')
+            ->doesntExpectOutputToContain('Filled the missing external ids')
+            ->assertSuccessful();
+
+        $this->assertEquals($afterBackfill, $this->demoState($organization), 'running again changes nothing');
+        $this->assertSame(0, ApiKey::query()->count());
+    }
+
+    public function test_external_id_backfill_only_touches_recognizable_seeded_records_without_an_id(): void
+    {
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+        $organization = Organization::query()->sole();
+        $expected = $this->externalIds($organization);
+        $this->clearExternalIds($organization);
+
+        $customer = fn (int $number) => Customer::withTrashed()->forOrganization($organization)
+            ->whereKey(array_search(DemoDataSeeder::customerExternalId($number), $expected['customers'], true))
+            ->sole();
+
+        // A visitor's customer whose email looks seeded and maps to the same id as demo customer #5.
+        $lookalike = Customer::factory()->for($organization)->create([
+            'email' => $this->unusedSeededLookingEmail($organization, 5),
+            'external_id' => null,
+        ]);
+
+        // The id of demo customer #10 is already used by a visitor's customer.
+        $holder = Customer::factory()->for($organization)->create(['external_id' => DemoDataSeeder::customerExternalId(10)]);
+        // Demo customer #20 had its email changed, #30 already got an id from the UI.
+        $customer(20)->update(['email' => 'renamed@corp.example']);
+        $customer(30)->update(['external_id' => 'crm-30']);
+        // A deleted demo product still gets its id; visitor products never do.
+        $deletedProduct = $organization->products()->where('sku', 'PB-002-ESS')->sole();
+        $deletedProduct->delete();
+        $outOfCatalog = Product::factory()->for($organization)->create(['sku' => 'PB-099-ESS', 'external_id' => null]);
+        $visitorProduct = Product::factory()->for($organization)->create(['sku' => 'VISITOR-1', 'external_id' => null]);
+
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+
+        $this->assertSame(DemoDataSeeder::customerExternalId(5), $customer(5)->external_id, 'the seeded (older) customer wins');
+        $this->assertNull($lookalike->refresh()->external_id);
+        $this->assertSame(DemoDataSeeder::customerExternalId(10), $holder->refresh()->external_id);
+        $this->assertNull($customer(10)->external_id);
+        $this->assertNull($customer(20)->external_id);
+        $this->assertSame('crm-30', $customer(30)->external_id);
+        $this->assertSame('demo-prd-002-ESS', $deletedProduct->refresh()->external_id);
+        $this->assertNull($outOfCatalog->refresh()->external_id);
+        $this->assertNull($visitorProduct->refresh()->external_id);
+        $this->assertSame(40, Product::withTrashed()->forOrganization($organization)->whereNotNull('external_id')->count());
+        $this->assertSame(67 + 1, Customer::withTrashed()->forOrganization($organization)->where('external_id', 'like', 'demo-cus-%')->count());
+
+        $state = $this->demoState($organization);
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+        $this->assertEquals($state, $this->demoState($organization));
+    }
+
     public function test_never_takes_over_an_account_registered_with_the_demo_email(): void
     {
         $realOrganization = Organization::factory()->create();
@@ -271,6 +403,96 @@ class DemoCommandTest extends TestCase
 
         $this->assertModelExists($product);
         $this->assertSame(0, $impostor->users()->count());
+    }
+
+    /**
+     * @return array{products: array<string, string|null>, customers: array<string, string|null>}
+     */
+    private function externalIds(Organization $organization): array
+    {
+        return [
+            'products' => Product::withTrashed()->forOrganization($organization)->orderBy('id')->pluck('external_id', 'id')->all(),
+            'customers' => Customer::withTrashed()->forOrganization($organization)->orderBy('id')->pluck('external_id', 'id')->all(),
+        ];
+    }
+
+    /**
+     * What a demo seeded before B1 looks like after the migrations: no external ids, nothing else touched.
+     */
+    private function clearExternalIds(Organization $organization): void
+    {
+        foreach (['products', 'customers'] as $table) {
+            DB::table($table)->where('organization_id', $organization->id)->update(['external_id' => null]);
+        }
+    }
+
+    /**
+     * Every stored column of the demo's records, so any unexpected write shows up.
+     *
+     * @return array<string, list<array<string, mixed>>>
+     */
+    private function demoState(Organization $organization): array
+    {
+        $rows = fn (string $table, string $column = 'organization_id', ?array $ids = null) => DB::table($table)
+            ->when($ids === null, fn ($query) => $query->where($column, $organization->id), fn ($query) => $query->whereIn($column, $ids))
+            ->orderBy('id')
+            ->get()
+            ->map(fn (object $row) => (array) $row)
+            ->all();
+
+        return [
+            'products' => $rows('products'),
+            'customers' => $rows('customers'),
+            'transactions' => $rows('transactions'),
+            'transaction_items' => $rows('transaction_items', 'transaction_id', $organization->transactions()->pluck('id')->all()),
+            'transaction_status_changes' => $rows('transaction_status_changes'),
+            'api_keys' => $rows('api_keys'),
+        ];
+    }
+
+    /**
+     * @param  array<string, list<array<string, mixed>>>  $state
+     * @return array<string, list<array<string, mixed>>>
+     */
+    private function withoutExternalIds(array $state): array
+    {
+        foreach (['products', 'customers'] as $table) {
+            $state[$table] = array_map(fn (array $row) => array_diff_key($row, ['external_id' => true]), $state[$table]);
+        }
+
+        return $state;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function analyticsResponses(Organization $organization): array
+    {
+        // Each run re-hashes the demo password, which ends earlier sessions.
+        $this->flushSession();
+        $this->app['auth']->forgetGuards();
+        $owner = User::query()->where('email', 'demo@example.com')->sole();
+        $responses = [];
+
+        foreach (['/api/v1/dashboard', '/api/v1/analytics/revenue?granularity=week', '/api/v1/analytics/products',
+            '/api/v1/analytics/customers', '/api/v1/analytics/transactions', '/api/v1/transactions?per_page=50'] as $path) {
+            $responses[$path] = $this->actingInOrganization($owner, $organization)->getJson($path)->assertOk()->json();
+        }
+
+        return $responses;
+    }
+
+    private function unusedSeededLookingEmail(Organization $organization, int $number): string
+    {
+        foreach ([['ana', 'almeida'], ['bruno', 'barbosa'], ['camila', 'cardoso'], ['diego', 'costa']] as [$first, $last]) {
+            $email = sprintf('%s.%s.%02d@example.com', $first, $last, $number);
+
+            if (! Customer::withTrashed()->forOrganization($organization)->where('email', $email)->exists()) {
+                return $email;
+            }
+        }
+
+        $this->fail('No unused seeded-looking email found.');
     }
 
     /**

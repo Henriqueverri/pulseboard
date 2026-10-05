@@ -7,8 +7,9 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * Relations are only rendered when eager loaded, so the same resource serves
- * compact embeds (e.g. a customer's recent transactions), listings and details.
+ * Relations (and columns left out of a select) are only rendered when loaded, so
+ * the same resource serves compact embeds (e.g. a customer's recent
+ * transactions), listings and details.
  *
  * @mixin Transaction
  */
@@ -21,6 +22,8 @@ class TransactionResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'external_id' => $this->whenHas('external_id'),
+            'source' => $this->whenHas('source', fn () => $this->source->value),
             'status' => $this->status->value,
             'total_amount' => $this->total_amount,
             'occurred_at' => $this->occurred_at,
@@ -32,6 +35,10 @@ class TransactionResource extends JsonResource
                 'is_deleted' => $this->customer->trashed(),
             ]),
             'items' => TransactionItemResource::collection($this->whenLoaded('items')),
+            'status_history' => $this->whenLoaded(
+                'statusChanges',
+                fn () => TransactionStatusChangeResource::collection($this->resource->statusHistory()),
+            ),
         ];
     }
 }

@@ -3,23 +3,28 @@
 namespace Tests\Feature\Domain;
 
 use App\Enums\ProductStatus;
+use App\Enums\TransactionSource;
 use App\Enums\TransactionStatus;
+use App\Models\ApiKey;
 use App\Models\Customer;
 use App\Models\Organization;
 use App\Models\Product;
 use App\Models\Transaction;
 use App\Models\TransactionItem;
+use App\Models\TransactionStatusChange;
 use App\Models\User;
 use App\Support\Analytics\ReportingPeriod;
+use App\Support\ExternalId;
 use Carbon\CarbonImmutable;
 use Database\Seeders\DemoDataSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Tests\Feature\Domain\Concerns\AssertsStatusHistory;
 use Tests\TestCase;
 
 class DemoSeederTest extends TestCase
 {
-    use RefreshDatabase;
+    use AssertsStatusHistory, RefreshDatabase;
 
     protected function setUp(): void
     {
@@ -128,6 +133,42 @@ class DemoSeederTest extends TestCase
             ->count();
 
         $this->assertGreaterThan(0, $snapshotsBelowCurrentPrice);
+    }
+
+    public function test_catalog_and_customers_have_stable_external_ids(): void
+    {
+        $this->assertSame(0, Product::query()->whereNull('external_id')->count());
+        $this->assertSame(0, Customer::query()->whereNull('external_id')->count());
+
+        $this->assertSame('demo-prd-001-ESS', Product::query()->where('sku', 'PB-001-ESS')->value('external_id'));
+        $this->assertSame('demo-prd-020-PRO', Product::query()->where('sku', 'PB-020-PRO')->value('external_id'));
+        $this->assertSame(
+            ['demo-cus-001', 'demo-cus-070'],
+            [Customer::query()->min('external_id'), Customer::query()->max('external_id')],
+        );
+
+        foreach ([...Product::query()->pluck('external_id'), ...Customer::query()->pluck('external_id')] as $externalId) {
+            $this->assertMatchesRegularExpression(ExternalId::PATTERN, $externalId);
+        }
+    }
+
+    public function test_every_transaction_is_seeded_with_a_consistent_status_history(): void
+    {
+        $this->assertSame(Transaction::query()->count(), Transaction::query()->where('source', TransactionSource::Seed)->count());
+        $this->assertSame(0, Transaction::query()->whereNotNull('external_id')->count());
+        $this->assertSame(0, Transaction::query()->whereNotNull('api_key_id')->count());
+
+        $this->assertStatusHistoryMatchesCurrentStatus();
+
+        $this->assertSame(0, TransactionStatusChange::query()
+            ->join('transactions', 'transactions.id', '=', 'transaction_status_changes.transaction_id')
+            ->whereColumn('transaction_status_changes.occurred_at', '!=', 'transactions.occurred_at')
+            ->count());
+    }
+
+    public function test_seed_never_creates_api_keys(): void
+    {
+        $this->assertSame(0, ApiKey::query()->count());
     }
 
     public function test_customers_have_different_purchase_volumes(): void

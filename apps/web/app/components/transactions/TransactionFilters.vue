@@ -53,7 +53,7 @@ const sheetFilterCount = computed(() => [filters.value.status, filters.value.fro
       <div class="flex gap-2 md:contents">
         <UiSearchInput
           v-model="search"
-          placeholder="ID da transação, cliente ou e-mail"
+          placeholder="ID, ID externo, cliente ou e-mail"
           label="Buscar transações"
           class="md:max-w-xs"
         />

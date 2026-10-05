@@ -63,6 +63,9 @@ services:
         value: stderr
       - key: LOG_LEVEL
         value: info
+      # One JSON object per line, so the Render log search can filter by request_id, event or code.
+      - key: LOG_STDERR_FORMATTER
+        value: Monolog\Formatter\JsonFormatter
       - key: DEMO_PASSWORD
         sync: false
       - key: DEMO_OWNER_EMAIL

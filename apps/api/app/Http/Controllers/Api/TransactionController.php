@@ -49,6 +49,7 @@ class TransactionController extends Controller
             'customer',
             'items' => fn (HasMany $items) => $items->orderBy('created_at')->orderBy('id'),
             'items.product',
+            'statusChanges',
         ]);
 
         return TransactionResource::make($transaction);

@@ -37,6 +37,7 @@ class ProductResource extends JsonResource
             'sku' => $this->sku,
             'price' => $this->price,
             'status' => $this->status->value,
+            'external_id' => $this->external_id,
             $this->mergeWhen($this->metrics !== null, fn () => $this->metrics),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,

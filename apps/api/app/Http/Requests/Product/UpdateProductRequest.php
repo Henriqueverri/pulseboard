@@ -5,6 +5,7 @@ namespace App\Http\Requests\Product;
 use App\Enums\ProductStatus;
 use App\Models\Product;
 use App\Support\CurrentOrganization;
+use App\Support\ExternalId;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -38,6 +39,14 @@ class UpdateProductRequest extends FormRequest
             ],
             'price' => ['sometimes', 'required', 'numeric', 'decimal:0,2', 'min:0', 'max:9999999999.99'],
             'status' => ['sometimes', 'required', Rule::enum(ProductStatus::class)],
+            'external_id' => [
+                'sometimes',
+                'nullable',
+                ...ExternalId::rules(),
+                Rule::unique('products', 'external_id')
+                    ->where('organization_id', $current->organization->id)
+                    ->ignore($product->id),
+            ],
         ];
     }
 
@@ -50,6 +59,8 @@ class UpdateProductRequest extends FormRequest
             'id.prohibited' => 'The id cannot be changed.',
             'organization_id.prohibited' => 'A product cannot be moved to another organization.',
             'sku.unique' => 'This SKU is already used by another product in this organization, including deleted products.',
+            'external_id.regex' => 'The external id may only contain letters, numbers, dots, underscores, colons and hyphens.',
+            'external_id.unique' => 'This external id is already used by another product in this organization, including deleted products.',
         ];
     }
 }

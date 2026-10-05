@@ -4,10 +4,13 @@ use App\Http\Controllers\Api\Analytics\CustomerAnalyticsController;
 use App\Http\Controllers\Api\Analytics\ProductAnalyticsController;
 use App\Http\Controllers\Api\Analytics\RevenueAnalyticsController;
 use App\Http\Controllers\Api\Analytics\TransactionStatusAnalyticsController;
+use App\Http\Controllers\Api\ApiKeyController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\HealthController;
+use App\Http\Controllers\Api\Ingest\IngestStatusChangeController;
+use App\Http\Controllers\Api\Ingest\IngestTransactionController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\TransactionController;
@@ -42,5 +45,16 @@ Route::prefix('v1')->group(function (): void {
         Route::apiResource('products', ProductController::class);
         Route::apiResource('customers', CustomerController::class);
         Route::apiResource('transactions', TransactionController::class)->only(['index', 'show']);
+
+        Route::apiResource('api-keys', ApiKeyController::class)
+            ->only(['index', 'store', 'destroy'])
+            ->parameters(['api-keys' => 'apiKey']);
+    });
+
+    // Integration API: API key only (no session, CSRF or X-Organization-Id), rate limited per key.
+    Route::prefix('ingest')->middleware(['api-key', 'throttle:ingest'])->group(function (): void {
+        Route::post('/transactions', [IngestTransactionController::class, 'store']);
+        Route::get('/transactions/{externalId}', [IngestTransactionController::class, 'show']);
+        Route::post('/transactions/{externalId}/status-changes', IngestStatusChangeController::class);
     });
 });

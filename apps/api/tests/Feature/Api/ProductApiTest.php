@@ -211,6 +211,75 @@ class ProductApiTest extends TestCase
             ->assertJsonValidationErrors(['sku']);
     }
 
+    public function test_external_id_is_optional_and_can_be_set_changed_and_cleared(): void
+    {
+        $this->actingInOrganization($this->owner, $this->organization)
+            ->postJson('/api/v1/products', ['name' => 'No external id', 'price' => 10])
+            ->assertCreated()
+            ->assertJsonPath('data.external_id', null);
+
+        $id = $this->postJson('/api/v1/products', ['name' => 'Linked', 'price' => 10, 'external_id' => 'shop:prd_123'])
+            ->assertCreated()
+            ->assertJsonPath('data.external_id', 'shop:prd_123')
+            ->json('data.id');
+
+        $this->getJson("/api/v1/products/{$id}")->assertOk()->assertJsonPath('data.external_id', 'shop:prd_123');
+        $this->getJson('/api/v1/products?q=Linked')->assertOk()->assertJsonPath('data.0.external_id', 'shop:prd_123');
+
+        $this->patchJson("/api/v1/products/{$id}", ['external_id' => 'prd-456'])
+            ->assertOk()
+            ->assertJsonPath('data.external_id', 'prd-456');
+
+        $this->patchJson("/api/v1/products/{$id}", ['name' => 'Renamed'])
+            ->assertOk()
+            ->assertJsonPath('data.external_id', 'prd-456');
+
+        $this->patchJson("/api/v1/products/{$id}", ['external_id' => ''])
+            ->assertOk()
+            ->assertJsonPath('data.external_id', null);
+
+        $this->assertDatabaseHas('products', ['id' => $id, 'external_id' => null]);
+    }
+
+    public function test_external_id_format_is_validated(): void
+    {
+        $this->actingInOrganization($this->owner, $this->organization);
+
+        foreach (['has space', 'acentuação', 'slash/id', str_repeat('a', 129), ['array']] as $invalid) {
+            $this->postJson('/api/v1/products', ['name' => 'Bad', 'price' => 10, 'external_id' => $invalid])
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors(['external_id']);
+        }
+
+        $this->postJson('/api/v1/products', ['name' => 'Longest', 'price' => 10, 'external_id' => str_repeat('a', 128)])
+            ->assertCreated();
+    }
+
+    public function test_external_id_is_unique_within_the_organization_including_deleted_products(): void
+    {
+        Product::factory()->for($this->organization)->create(['external_id' => 'prd_1']);
+        Product::factory()->for($this->organization)->create(['external_id' => 'prd_old'])->delete();
+        Product::factory()->for(Organization::factory())->create(['external_id' => 'prd_shared']);
+        $product = Product::factory()->for($this->organization)->create(['external_id' => 'prd_2']);
+
+        $this->actingInOrganization($this->owner, $this->organization);
+
+        foreach (['prd_1', 'prd_old'] as $taken) {
+            $this->postJson('/api/v1/products', ['name' => 'Copy', 'price' => 10, 'external_id' => $taken])
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors(['external_id']);
+        }
+
+        $this->patchJson("/api/v1/products/{$product->id}", ['external_id' => 'prd_1'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['external_id']);
+
+        $this->patchJson("/api/v1/products/{$product->id}", ['external_id' => 'prd_2'])->assertOk();
+
+        $this->postJson('/api/v1/products', ['name' => 'Mine', 'price' => 10, 'external_id' => 'prd_shared'])
+            ->assertCreated();
+    }
+
     public function test_show_returns_product_with_paid_sales_metrics(): void
     {
         $product = Product::factory()->for($this->organization)->create(['price' => '50.00']);

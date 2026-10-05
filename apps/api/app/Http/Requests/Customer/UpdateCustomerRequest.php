@@ -4,6 +4,7 @@ namespace App\Http\Requests\Customer;
 
 use App\Models\Customer;
 use App\Support\CurrentOrganization;
+use App\Support\ExternalId;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -44,6 +45,14 @@ class UpdateCustomerRequest extends FormRequest
                     ->where('organization_id', $current->organization->id)
                     ->ignore($customer->id),
             ],
+            'external_id' => [
+                'sometimes',
+                'nullable',
+                ...ExternalId::rules(),
+                Rule::unique('customers', 'external_id')
+                    ->where('organization_id', $current->organization->id)
+                    ->ignore($customer->id),
+            ],
         ];
     }
 
@@ -56,6 +65,8 @@ class UpdateCustomerRequest extends FormRequest
             'id.prohibited' => 'The id cannot be changed.',
             'organization_id.prohibited' => 'A customer cannot be moved to another organization.',
             'email.unique' => 'This email is already used by another customer in this organization, including deleted customers.',
+            'external_id.regex' => 'The external id may only contain letters, numbers, dots, underscores, colons and hyphens.',
+            'external_id.unique' => 'This external id is already used by another customer in this organization, including deleted customers.',
         ];
     }
 }

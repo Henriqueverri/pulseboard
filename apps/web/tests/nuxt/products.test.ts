@@ -33,6 +33,7 @@ const product: Product = {
   sku: 'MS-01',
   price: '99.90',
   status: 'active',
+  external_id: null,
   created_at: '2026-09-01T12:00:00Z',
   updated_at: '2026-09-01T12:00:00Z',
 }
@@ -42,9 +43,9 @@ const submit = clickButton
 
 describe('changedFields', () => {
   it('returns only what changed, comparing prices as amounts', () => {
-    expect(changedFields(product, { name: 'Mouse sem fio', sku: 'MS-01', price: '99.9', status: 'active' })).toEqual({})
-    expect(changedFields(product, { name: 'Mouse', sku: null, price: '89.90', status: 'inactive' }))
-      .toEqual({ name: 'Mouse', sku: null, price: '89.90', status: 'inactive' })
+    expect(changedFields(product, { name: 'Mouse sem fio', sku: 'MS-01', price: '99.9', status: 'active', external_id: null })).toEqual({})
+    expect(changedFields(product, { name: 'Mouse', sku: null, price: '89.90', status: 'inactive', external_id: 'prd_1' }))
+      .toEqual({ name: 'Mouse', sku: null, price: '89.90', status: 'inactive', external_id: 'prd_1' })
   })
 })
 
@@ -63,7 +64,7 @@ describe('ProductFormDialog', () => {
     await type(field('Preço'), '1.234,5')
     await submit('Criar produto')
 
-    expect(repository.create).toHaveBeenCalledWith({ name: 'Mouse sem fio', sku: null, price: '1234.50', status: 'active' })
+    expect(repository.create).toHaveBeenCalledWith({ name: 'Mouse sem fio', sku: null, price: '1234.50', status: 'active', external_id: null })
     expect(wrapper.emitted('saved')?.[0]).toEqual([{ ...product, sku: null }, 'created'])
     expect(wrapper.emitted('update:open')?.at(-1)).toEqual([false])
     wrapper.unmount()

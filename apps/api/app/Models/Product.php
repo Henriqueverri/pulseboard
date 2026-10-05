@@ -26,6 +26,7 @@ class Product extends Model
         'sku',
         'price',
         'status',
+        'external_id',
     ];
 
     /**
