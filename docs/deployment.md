@@ -94,10 +94,31 @@ Nenhum valor real vai para o Git. No `render.yaml`, os secrets (`APP_KEY`, `DB_U
 | `TRUSTED_PROXIES` | `*` (a API só é acessível pelo proxy do Render; sem isso as requisições parecem HTTP e o rate limit de login trata todos os usuários como o mesmo IP) |
 | `LOG_CHANNEL` | `stderr` (logs aparecem no painel do Render) |
 | `LOG_LEVEL` | `info` |
+| `LOG_STDERR_FORMATTER` | `Monolog\Formatter\JsonFormatter` (um objeto JSON por linha, ver [Logs](#logs)) |
 | `DEMO_PASSWORD` | secret — senha das contas de demonstração (mínimo 12 caracteres) |
 | `DEMO_OWNER_EMAIL` / `DEMO_MEMBER_EMAIL` | `demo@example.com` / `demo-member@example.com` (padrão) |
 
 `PORT` é definida pelo próprio Render. Localmente, os modelos são [`apps/api/.env.example`](../apps/api/.env.example) e [`apps/web/.env.example`](../apps/web/.env.example).
+
+Nenhuma API Key de integração é configurada no deploy: elas são criadas pelos owners na UI e só o hash fica no banco.
+
+## Logs
+
+Com `LOG_STDERR_FORMATTER`, cada linha no painel do Render é um objeto JSON, filtrável pela busca de logs. Toda linha de uma requisição em `api/*` carrega o `request_id`, que é o mesmo valor do header `X-Request-Id` devolvido ao cliente. A ingestão grava uma linha por requisição, como esta, capturada localmente com a mesma configuração (IDs encurtados; em produção, `channel` é `production`):
+
+```json
+{"message":"Transaction ingestion completed.","context":{"request_id":"a0217562-…","event":"ingest.transaction","outcome":"created","organization_id":"01a1099b-…","api_key_id":"01a1099c-…","api_key_prefix":"9ZHIXrxjnJ8a","external_id":"e2e_order_1791162587668","transaction_id":"8392c213-…","items_count":1,"http_status":201,"code":null,"duration_ms":24.03},"level":200,"level_name":"INFO","channel":"local","datetime":"2026-10-05T01:09:52.133628+00:00","extra":{}}
+```
+
+| `event` | Quando | Campos úteis |
+|---------|--------|--------------|
+| `ingest.transaction` | Cada `POST /ingest/transactions` | `outcome` (`created`, `replayed`, `conflict`, `rejected`, `failed`), `code`, `external_id`, `api_key_prefix`, `duration_ms` |
+| `ingest.status_change` | Cada mudança de status | `outcome` (`transitioned`, `replayed`, `conflict`, `not_found`, `rejected`, `failed`), `requested_status`, `code` |
+| `ingest.auth_failed` | Chave recusada (`warning`) | `reason` (`missing`, `malformed`, `unknown`, `wrong_secret`, `revoked`, `expired`), `api_key_prefix` quando parseável |
+
+Para investigar um problema de integração, peça o `X-Request-Id` ou o `external_id` ao integrador e busque por ele nos logs; a transação também aparece na busca da tela de Transações pelo `external_id`, com a linha do tempo de status. A chave, o header `Authorization`, o hash e os dados pessoais do cliente nunca são logados.
+
+Mudanças nas variáveis do `render.yaml` valem no próximo sync do Blueprint; num serviço criado sem Blueprint, adicione `LOG_STDERR_FORMATTER` em *Environment* no painel.
 
 ## Front no Cloudflare Pages
 
@@ -119,7 +140,7 @@ No Pages (`CF_PAGES`), o Nitro usa o preset `cloudflare-pages-static`: gera `dis
 
 - sem `DEMO_PASSWORD` (ou com menos de 12 caracteres) o comando falha sem gravar nada;
 - se a demo já existe, mantém os dados, sincroniza a senha das duas contas com `DEMO_PASSWORD` e **completa o histórico até hoje**: gera vendas só para os dias depois da última venda, a partir do catálogo ativo da demo e dos clientes não excluídos, com os preços atuais. Cada dia é gerado a partir de uma semente própria (slug + data), então é reproduzível, e rodar de novo no mesmo dia não adiciona nada;
-- `--refresh` apaga produtos, clientes e transações **somente da organização de demo** (inclusive o que visitantes criaram) e gera o histórico de novo, terminando no dia atual;
+- `--refresh` apaga API Keys, produtos, clientes e transações **somente da organização de demo** (inclusive o que visitantes criaram ou ingeriram) e gera o histórico de novo, terminando no dia atual;
 - recusa rodar se um dos e-mails de demo pertence a uma conta de outra organização, ou se o slug pertence a uma organização que não é da conta demo owner.
 
 Em produção ele roda a cada start do container (via `pulseboard:release`), sem `--refresh`. Como o Render Free hiberna após ~15 min sem tráfego, praticamente toda primeira visita sobe o container e completa os dias que faltam — o período padrão do dashboard continua com dados e comparações sem intervenção manual.
@@ -134,6 +155,8 @@ DB_URL='<SUPABASE_SESSION_POOLER_URL>' DB_SSLMODE=require DEMO_PASSWORD='<senha 
 
 O `DatabaseSeeder` (`migrate:fresh --seed`) é só para desenvolvimento: usa factories e cria `test@example.com` / `password`.
 
+**API Keys na demo:** nenhuma chave é criada pelo `pulseboard:demo`, pelo seed ou pelo entrypoint. Visitantes criam as próprias na conta owner da demo; na organização `pulseboard-demo` toda chave expira em 24 horas, e o limite de 10 ativas, o rate limit de 120 req/min por chave e o `--refresh` contêm abusos.
+
 ## Checklist de um novo ambiente
 
 1. Domínio com os subdomínios `app` (front) e `api` (API).
@@ -143,12 +166,14 @@ O `DatabaseSeeder` (`migrate:fresh --seed`) é só para desenvolvimento: usa fac
 5. Custom domain `api.` no Render (CNAME no DNS) e conferir `https://api.<domínio>/api/v1/health`.
 6. Cloudflare Pages com as variáveis de build e o custom domain `app.`.
 7. Login no front com `DEMO_OWNER_EMAIL` / `DEMO_PASSWORD`, criar/editar/remover um produto e navegar pelo analytics.
+8. Em **API Keys**, criar uma chave, enviar uma transação com ela ([`integration.md`](integration.md#3-envie-uma-transação)), conferir a venda em Transações e a linha JSON nos logs, e revogar a chave.
 
 ## Limitações operacionais
 
 - Um único ambiente de produção; sem staging.
 - Render Free: o serviço hiberna sem tráfego (primeiro acesso lento) e cada start roda `optimize` + migrations + demo antes de aceitar requisições.
 - Supabase Free: o projeto pausa após dias sem uso.
-- Sem monitoramento de erros externo: os logs são o `stderr` do container, no painel do Render.
+- Sem monitoramento de erros externo: os logs são o `stderr` do container (JSON), no painel do Render.
+- O rate limit da ingestão usa o cache em banco, com escritas extras por requisição; aceitável no volume da demo.
 - A conta demo owner pode alterar os dados da demo (é o objetivo); `--refresh` restaura o estado original.
 - O cadastro é aberto: visitantes podem criar organizações próprias no banco de produção (com rate limit).

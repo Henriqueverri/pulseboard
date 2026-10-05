@@ -1,8 +1,8 @@
 # PulseBoard API
 
-API REST em Laravel 12 (PHP 8.4) com autenticação Sanctum SPA (cookie de sessão + CSRF), multi-tenancy por Organization (`X-Organization-Id` + membership) e PostgreSQL.
+API REST em Laravel 12 (PHP 8.4) com duas superfícies: a interna, para o front, com autenticação Sanctum SPA (cookie de sessão + CSRF) e multi-tenancy por Organization (`X-Organization-Id` + membership); e a de ingestão (`/api/v1/ingest/*`), para sistemas externos, autenticada por API Key. PostgreSQL.
 
-Visão geral e setup local no [README da raiz](../../README.md). Contratos dos endpoints em [`docs/api.md`](../../docs/api.md), decisões em [`docs/architecture.md`](../../docs/architecture.md), testes em [`docs/testing.md`](../../docs/testing.md) e deploy em [`docs/deployment.md`](../../docs/deployment.md).
+Visão geral e setup local no [README da raiz](../../README.md). Guia de integração em [`docs/integration.md`](../../docs/integration.md), contratos dos endpoints em [`docs/api.md`](../../docs/api.md), decisões em [`docs/architecture.md`](../../docs/architecture.md), testes em [`docs/testing.md`](../../docs/testing.md) e deploy em [`docs/deployment.md`](../../docs/deployment.md).
 
 ## Comandos
 
@@ -19,13 +19,19 @@ vendor/bin/pint --test
 
 | Pasta | Conteúdo |
 |-------|----------|
-| `app/Http/Controllers/Api` | Controllers finos (auth, CRUD, analytics) |
+| `app/Http/Controllers/Api` | Controllers finos (auth, CRUD, analytics, API Keys) |
+| `app/Http/Controllers/Api/Ingest` | API de ingestão: criação, reconciliação e mudanças de status |
 | `app/Http/Middleware/EnsureOrganizationContext.php` | Resolve o tenant do header e valida a membership |
+| `app/Http/Middleware/AuthenticateApiKey.php` | Autentica a ingestão pela API Key e registra a organização da chave |
+| `app/Http/Middleware/AssignRequestId.php` | `X-Request-Id` em toda resposta e no contexto dos logs |
 | `app/Http/Requests`, `app/Http/Resources` | Validação e formato das respostas |
 | `app/Policies` | Autorização por papel (owner/member) dentro da organização |
 | `app/Services` | Métricas e analytics (agregações em SQL) |
+| `app/Services/Ingestion`, `app/Services/TransactionLifecycle.php` | Ingestão idempotente (insert-first + fingerprint) e a única porta de mudança de status |
+| `app/Enums/TransactionStatus.php` | Máquina de estados das transações |
+| `app/Support/ApiKeyGenerator.php` | Formato `pb_<prefix>_<secret>`, hash SHA-256 e verificação |
 | `app/Support/Analytics` | Período, comparação, granularidade, buckets por timezone |
-| `bootstrap/app.php` | Middleware, erros em JSON para `api/*` |
+| `bootstrap/app.php` | Middleware, rate limit e erros em JSON para `api/*` (com `code` na ingestão) |
 | `config/trustedproxy.php` | `TRUSTED_PROXIES` para rodar atrás do proxy do Render |
 | `app/Console/Commands` | `pulseboard:demo` (organização de demonstração) e `pulseboard:release` (start do container) |
 | `Dockerfile`, `docker/` | Imagem de produção: Nginx + PHP-FPM, entrypoint, configs de PHP |

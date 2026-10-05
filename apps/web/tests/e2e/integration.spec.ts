@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
+import { expect, test, type Page } from '@playwright/test'
 
 // Demo owner created by `php artisan pulseboard:demo`, which reads the same variables.
 const OWNER = {
@@ -10,6 +11,14 @@ const API_URL = process.env.E2E_API_URL || process.env.NUXT_PUBLIC_API_URL || 'h
 
 if (!OWNER.password) {
   throw new Error('Set DEMO_PASSWORD (the value used by `php artisan pulseboard:demo`) or E2E_PASSWORD before running the e2e smoke.')
+}
+
+async function expectNoAxeViolations(page: Page) {
+  const { violations } = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze()
+
+  expect(violations.map(violation => `${violation.id}: ${violation.nodes.map(node => node.target.join(' ')).join(', ')}`)).toEqual([])
 }
 
 /**
@@ -53,11 +62,21 @@ test('API key → ingestion → lifecycle in the UI → revocation', async ({ pa
     await expect(secretDialog.getByText('Esta é a única vez que a chave aparece.')).toBeVisible()
     secret = await secretDialog.locator('#api-key-secret').inputValue()
     expect(secret).toMatch(/^pb_[A-Za-z0-9]{12}_[A-Za-z0-9]{40}$/)
+    await expectNoAxeViolations(page)
 
     await secretDialog.getByRole('button', { name: 'Já guardei a chave' }).click()
     await expect(secretDialog).toBeHidden()
     await expect(page.locator('#api-key-secret')).toHaveCount(0)
     await expect(page.getByRole('row', { name: new RegExp(keyName) })).toContainText('Ativa')
+  })
+
+  await test.step('the API keys page has no axe violations on desktop and mobile', async () => {
+    await expectNoAxeViolations(page)
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(page.getByRole('heading', { level: 1, name: 'API Keys' })).toBeVisible()
+    await expectNoAxeViolations(page)
+    await page.setViewportSize({ width: 1280, height: 720 })
   })
 
   const api = await playwright.request.newContext()
