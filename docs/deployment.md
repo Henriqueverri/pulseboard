@@ -47,10 +47,10 @@ Sem usar o Blueprint, os mesmos valores vão no Dashboard: *New → Web Service*
 O Render Free não tem Pre-Deploy Command nem Shell, então migrations e demo rodam no start do container ([`apps/api/docker/entrypoint.sh`](../apps/api/docker/entrypoint.sh)):
 
 1. `php artisan optimize` — cache de config, rotas, eventos e views, gerado no runtime (as variáveis não existem no build);
-2. `php artisan pulseboard:release` — `migrate --force` e depois `pulseboard:demo`, segurando um advisory lock do PostgreSQL: se dois containers sobem ao mesmo tempo (restart durante um deploy), o segundo espera e encontra tudo pronto;
+2. `php artisan pulseboard:release` — `migrate --force`, `pulseboard:demo` e `pulseboard:ai-prune` (retenção dos dados de IA, ver [Insights](#insights-custo-cotas-e-retenção)), segurando um advisory lock do PostgreSQL: se dois containers sobem ao mesmo tempo (restart durante um deploy), o segundo espera e encontra tudo pronto;
 3. PHP-FPM + Nginx na porta `$PORT` (o Render define; padrão 10000).
 
-Qualquer falha nesses passos (banco inacessível, migration quebrada, `DEMO_PASSWORD` ausente ou curta) derruba o container antes de ele aceitar tráfego; num deploy, o Render mantém a versão anterior no ar. O Free hiberna o serviço após ~15 min sem requisições: o primeiro acesso depois disso espera o container subir de novo (e repetir os passos acima, que são idempotentes).
+Qualquer falha nesses passos (banco inacessível, migration quebrada, `DEMO_PASSWORD` ausente ou curta, retenção de IA inválida) derruba o container antes de ele aceitar tráfego; num deploy, o Render mantém a versão anterior no ar. O Free hiberna o serviço após ~15 min sem requisições: o primeiro acesso depois disso espera o container subir de novo (e repetir os passos acima, que são idempotentes).
 
 A imagem (Alpine, PHP 8.4-FPM com OPcache, Nginx, dependências `--no-dev`, usuário `www-data`, nenhum `.env` embutido) está descrita no [README da API](../apps/api/README.md#imagem-de-produção).
 
@@ -71,7 +71,7 @@ postgresql://postgres.<project-ref>:<senha-url-encoded>@aws-0-<região>.pooler.s
 
 ## Variáveis de ambiente
 
-Nenhum valor real vai para o Git. No `render.yaml`, os secrets (`APP_KEY`, `DB_URL`, `DEMO_PASSWORD`) usam `sync: false`: o Render pede os valores ao criar o Blueprint.
+Nenhum valor real vai para o Git. No `render.yaml`, os secrets (`APP_KEY`, `DB_URL`, `DEMO_PASSWORD`, `OPENAI_API_KEY`) usam `sync: false`: o Render pede os valores ao criar o Blueprint.
 
 | Variável | Valor |
 |----------|-------|
@@ -97,6 +97,11 @@ Nenhum valor real vai para o Git. No `render.yaml`, os secrets (`APP_KEY`, `DB_U
 | `LOG_STDERR_FORMATTER` | `Monolog\Formatter\JsonFormatter` (um objeto JSON por linha, ver [Logs](#logs)) |
 | `DEMO_PASSWORD` | secret — senha das contas de demonstração (mínimo 12 caracteres) |
 | `DEMO_OWNER_EMAIL` / `DEMO_MEMBER_EMAIL` | `demo@example.com` / `demo-member@example.com` (padrão) |
+| `AI_ENABLED` | `false` — kill switch global dos Insights (ver [Insights](#insights-custo-cotas-e-retenção)) |
+| `AI_PROVIDER` / `AI_MODEL` | `openai` / `gpt-6-luna` |
+| `OPENAI_API_KEY` | secret — só no painel do Render, nunca no Git nem no front |
+| `AI_MONTHLY_BUDGET_USD` | `2` — teto global do custo estimado no mês (UTC) |
+| `AI_DEMO_DAILY_IP_LIMIT` | `5` — gerações por IP por dia na organização de demo |
 
 `PORT` é definida pelo próprio Render. Localmente, os modelos são [`apps/api/.env.example`](../apps/api/.env.example) e [`apps/web/.env.example`](../apps/web/.env.example).
 
@@ -157,6 +162,35 @@ O `DatabaseSeeder` (`migrate:fresh --seed`) é só para desenvolvimento: usa fac
 
 **API Keys na demo:** nenhuma chave é criada pelo `pulseboard:demo`, pelo seed ou pelo entrypoint. Visitantes criam as próprias na conta owner da demo; na organização `pulseboard-demo` toda chave expira em 24 horas, e o limite de 10 ativas, o rate limit de 120 req/min por chave e o `--refresh` contêm abusos.
 
+## Insights: custo, cotas e retenção
+
+Os Insights ficam desligados até `AI_ENABLED=true`, e cada organização ainda precisa ativá-los. Antes de cada geração que pode chegar ao provedor, o `AiUsageGuard` aplica, nesta ordem:
+
+| Proteção | Configuração | Resposta |
+|----------|--------------|----------|
+| Kill switch | `AI_ENABLED` | `503 ai_disabled` (leitura e geração) |
+| Opt-in da organização | Configurações › Insights (owner) | `403 ai_not_enabled` |
+| Orçamento mensal global | `AI_MONTHLY_BUDGET_USD` (soma de `ai_runs.cost_micros` de todas as organizações no mês UTC; `0` bloqueia tudo) | `503 ai_disabled` até o dia 1º; resumos em cache continuam sendo servidos |
+| Cota diária por organização e por usuário | `AI_DAILY_ORG_LIMIT`, `AI_DAILY_USER_LIMIT` (dia no fuso da organização) | `429 ai_quota_exceeded` com `Retry-After` |
+| Cota diária por IP (só na demo) | `AI_DEMO_DAILY_IP_LIMIT` | `429 ai_quota_exceeded` com `Retry-After` até a meia-noite da demo |
+| Rate limit por minuto | `AI_REQUESTS_PER_MINUTE`, `AI_DEMO_REQUESTS_PER_MINUTE_PER_IP` | `429 rate_limited` |
+
+Cache hits não consomem cota nem orçamento. O login da demo é compartilhado, então a cota por usuário não segura um visitante sozinho; a cota por IP sim. O contador fica no cache (store `database`) com o hash SHA-256 do IP, nunca o IP em claro, e não vai para `ai_runs` nem para o provedor. Gerações recusadas por orçamento ou cota viram uma linha em `ai_runs` com `status=quota_exceeded` (`error_code` `ai_disabled` ou `ai_quota_exceeded`) e custo zero.
+
+O orçamento usa o custo **estimado** a partir dos preços de `config/ai.php`. Configure também o limite de gasto da conta no painel da OpenAI, que é a fonte de verdade da cobrança.
+
+**Retenção.** `pulseboard:ai-prune` apaga resumos em cache (`ai_insights`) com mais de `AI_INSIGHTS_RETENTION_DAYS` (30) e telemetria (`ai_runs`) com mais de `AI_RUNS_RETENTION_DAYS` (90), de todas as organizações, e não mexe em nenhuma outra tabela. Roda a cada start do container pelo `pulseboard:release`, já que o Render Free não tem cron. A retenção de `ai_runs` precisa ser de pelo menos 32 dias, porque as cotas e o orçamento leem essa tabela; um valor menor faz o comando (e o start) falhar. `--dry-run` só conta o que seria apagado.
+
+**Uso e custo.** `pulseboard:ai-usage` mostra, por dia (UTC), organização e modelo: runs, chamadas ao provedor, cache hits, falhas, recusas, tokens, custo estimado e latência p50/p95 das chamadas ao provedor, e termina com o gasto do mês contra o orçamento. Como o Render Free não tem Shell, rode da sua máquina apontando para o Supabase:
+
+```bash
+cd apps/api
+DB_URL='<SUPABASE_SESSION_POOLER_URL>' DB_SSLMODE=require AI_MONTHLY_BUDGET_USD=2 \
+  php artisan pulseboard:ai-usage --days=7 --organization=pulseboard-demo
+```
+
+Sem `--organization`, a tabela inclui todas as organizações; a linha do orçamento é sempre global. Repita no terminal o `AI_MONTHLY_BUDGET_USD` do Render para a porcentagem bater.
+
 ## Checklist de um novo ambiente
 
 1. Domínio com os subdomínios `app` (front) e `api` (API).
@@ -171,7 +205,7 @@ O `DatabaseSeeder` (`migrate:fresh --seed`) é só para desenvolvimento: usa fac
 ## Limitações operacionais
 
 - Um único ambiente de produção; sem staging.
-- Render Free: o serviço hiberna sem tráfego (primeiro acesso lento) e cada start roda `optimize` + migrations + demo antes de aceitar requisições.
+- Render Free: o serviço hiberna sem tráfego (primeiro acesso lento) e cada start roda `optimize` + migrations + demo + retenção de IA antes de aceitar requisições. A retenção só é aplicada quando o container sobe.
 - Supabase Free: o projeto pausa após dias sem uso.
 - Sem monitoramento de erros externo: os logs são o `stderr` do container (JSON), no painel do Render.
 - O rate limit da ingestão usa o cache em banco, com escritas extras por requisição; aceitável no volume da demo.

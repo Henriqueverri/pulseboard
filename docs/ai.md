@@ -39,6 +39,14 @@ Uma camada de IA **somente leitura** sobre os services de analytics existentes. 
 - Relatório markdown em `apps/api/storage/ai-eval/reports/<data>-<prompt>-<modelo>.md` (fora do Git), com métricas, casos, falhas, custo e latência (p50/p95) e uma amostra de 10% das respostas para revisão manual de relevância. LLM-as-judge não é usado.
 - Fixtures: `RecordedPeriodSummaryAnswersTest` (PHPUnit) reprocessa cada resposta gravada e exige o mesmo veredito do validator; para respostas gravadas da OpenAI, também o mesmo parsing do corpo da Responses API. As fixtures atuais vêm do provedor roteirizado; as do modelo real entram quando a avaliação rodar com a chave.
 
+## Proteções de produção (implementadas)
+
+- Orçamento mensal global no `AiUsageGuard`: soma de `ai_runs.cost_micros` de todas as organizações no mês corrente (UTC) contra `AI_MONTHLY_BUDGET_USD`. Ao atingir o teto, novas gerações respondem `ai_disabled`; resumos em cache continuam sendo servidos.
+- Cota diária por IP na organização de demo (`AI_DEMO_DAILY_IP_LIMIT`), porque o login da demo é compartilhado. Ela vale só para gerações que passaram pelas outras cotas, zera à meia-noite da demo e fica no cache com o hash do IP. O IP não vai para `ai_runs` nem para o provedor.
+- `pulseboard:ai-prune`: retenção de `ai_insights` (30 dias) e `ai_runs` (90 dias, mínimo de 32 porque cotas e orçamento leem essa tabela), aplicada a cada start do container pelo `pulseboard:release`.
+- `pulseboard:ai-usage`: uso por dia (UTC), organização e modelo, com tokens, custo estimado, latência p50/p95 e o gasto do mês contra o orçamento.
+- Configuração e operação em [deployment.md](deployment.md#insights-custo-cotas-e-retenção).
+
 ## Architecture Decision Records
 
 ### ADR-1 — Tool calling em vez de Text-to-SQL

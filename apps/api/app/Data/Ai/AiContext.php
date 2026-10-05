@@ -20,6 +20,8 @@ final readonly class AiContext
         public ReportingPeriod $period,
         public CarbonImmutable $today,
         public ?string $requestId = null,
+        // Only for the demo's per-IP quota; never sent to the provider or stored.
+        public ?string $ip = null,
     ) {}
 
     public static function for(
@@ -27,6 +29,7 @@ final readonly class AiContext
         ?User $user,
         ReportingPeriod $period,
         ?string $requestId = null,
+        ?string $ip = null,
     ): self {
         return new self(
             $organization,
@@ -34,6 +37,7 @@ final readonly class AiContext
             $period,
             CarbonImmutable::now($organization->timezone)->startOfDay(),
             $requestId,
+            $ip,
         );
     }
 }

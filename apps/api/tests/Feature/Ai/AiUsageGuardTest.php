@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Ai;
 
+use App\Console\Commands\DemoCommand;
 use App\Data\Ai\AiContext;
 use App\Exceptions\AiException;
 use App\Models\AiRun;
@@ -132,14 +133,118 @@ class AiUsageGuardTest extends TestCase
         $this->addToAssertionCount(1);
     }
 
-    private function context(): AiContext
+    public function test_the_monthly_budget_is_global_and_disables_new_generations(): void
     {
-        return AiContext::for($this->organization->refresh(), $this->user, ReportingPeriod::lastDays(30, $this->organization->timezone));
+        config(['ai.monthly_budget_usd' => 0.05, 'ai.limits.daily_per_organization' => 100, 'ai.limits.daily_per_user' => 100]);
+        $other = Organization::factory()->create();
+        $otherUser = $this->memberOf($other);
+
+        AiRun::query()->create([...$this->attributes($other, $otherUser, AiRun::STATUS_SUCCEEDED), 'cost_micros' => 30_000]);
+        $this->recordRun($this->user, AiRun::STATUS_INVALID_OUTPUT, costMicros: 19_999);
+
+        app(AiUsageGuard::class)->authorize($this->context(), AiRun::FEATURE_PERIOD_SUMMARY);
+
+        $this->recordRun($this->user, AiRun::STATUS_SUCCEEDED, costMicros: 1);
+
+        $this->assertGuardFails(AiException::DISABLED, 503);
+        $this->assertDatabaseHas('ai_runs', [
+            'organization_id' => $this->organization->id,
+            'status' => AiRun::STATUS_QUOTA_EXCEEDED,
+            'error_code' => AiException::DISABLED,
+            'cost_micros' => 0,
+        ]);
+        $this->assertSame(50_000, app(AiUsageGuard::class)->monthlySpendMicros());
     }
 
-    private function recordRun(User $user, string $status): void
+    public function test_the_monthly_budget_resets_on_the_first_day_of_the_month_in_utc(): void
     {
-        AiRun::query()->create($this->attributes($this->organization, $user, $status));
+        config(['ai.monthly_budget_usd' => 0.01]);
+
+        // 21:00 of Oct 31 in São Paulo is already Nov 1 in UTC: October's spend no longer counts.
+        Carbon::setTestNow('2026-10-31 23:59:00');
+        $this->recordRun($this->user, AiRun::STATUS_SUCCEEDED, costMicros: 10_000);
+        $this->assertGuardFails(AiException::DISABLED, 503);
+
+        Carbon::setTestNow('2026-11-01 00:00:00');
+        app(AiUsageGuard::class)->authorize($this->context(), AiRun::FEATURE_PERIOD_SUMMARY);
+        $this->assertSame(0, app(AiUsageGuard::class)->monthlySpendMicros());
+    }
+
+    public function test_a_zero_budget_blocks_every_new_generation(): void
+    {
+        config(['ai.monthly_budget_usd' => 0]);
+
+        $this->assertGuardFails(AiException::DISABLED, 503);
+    }
+
+    public function test_the_budget_never_blocks_reading_cached_summaries(): void
+    {
+        config(['ai.monthly_budget_usd' => 0]);
+
+        app(AiUsageGuard::class)->ensureAvailable($this->context());
+
+        $this->addToAssertionCount(1);
+    }
+
+    public function test_the_demo_is_limited_per_ip_per_day_even_with_one_shared_login(): void
+    {
+        Carbon::setTestNow('2026-10-05 12:00:00');
+        config(['ai.limits.daily_per_organization' => 100, 'ai.limits.daily_per_user' => 100, 'ai.limits.demo_daily_per_ip' => 2]);
+        $this->organization->forceFill(['slug' => DemoCommand::ORGANIZATION_SLUG])->save();
+
+        $this->authorizeFrom('198.51.100.7');
+        $this->authorizeFrom('198.51.100.7');
+
+        // 12:00 UTC is 09:00 in São Paulo: the counter resets at the demo's midnight, 15 hours later.
+        $this->assertGuardFails(AiException::QUOTA_EXCEEDED, 429, ip: '198.51.100.7', expectedRetryAfter: 15 * 3600);
+        $this->assertGuardFails(AiException::QUOTA_EXCEEDED, 429, ip: '198.51.100.7');
+        $this->assertSame(2, AiRun::query()->where('status', AiRun::STATUS_QUOTA_EXCEEDED)->where('error_code', AiException::QUOTA_EXCEEDED)->count());
+
+        $this->authorizeFrom('203.0.113.20');
+
+        Carbon::setTestNow('2026-10-06 03:00:00');
+        $this->authorizeFrom('198.51.100.7');
+    }
+
+    public function test_requests_rejected_by_another_limit_do_not_use_the_ip_quota(): void
+    {
+        config(['ai.limits.daily_per_user' => 1, 'ai.limits.demo_daily_per_ip' => 1]);
+        $this->organization->forceFill(['slug' => DemoCommand::ORGANIZATION_SLUG])->save();
+        $this->recordRun($this->user, AiRun::STATUS_SUCCEEDED);
+
+        $this->assertGuardFails(AiException::QUOTA_EXCEEDED, 429, ip: '198.51.100.7');
+
+        $visitor = $this->memberOf($this->organization, Organization::ROLE_MEMBER);
+        app(AiUsageGuard::class)->authorize($this->context(ip: '198.51.100.7', user: $visitor), AiRun::FEATURE_PERIOD_SUMMARY);
+        $this->addToAssertionCount(1);
+    }
+
+    public function test_only_the_demo_is_limited_per_ip(): void
+    {
+        config(['ai.limits.daily_per_organization' => 100, 'ai.limits.daily_per_user' => 100, 'ai.limits.demo_daily_per_ip' => 1]);
+        $this->assertFalse($this->organization->isDemo());
+
+        foreach (range(1, 3) as $ignored) {
+            $this->authorizeFrom('198.51.100.7');
+        }
+
+        $this->assertSame(0, AiRun::query()->count());
+    }
+
+    private function context(?string $ip = null, ?User $user = null): AiContext
+    {
+        return AiContext::for($this->organization->refresh(), $user ?? $this->user, ReportingPeriod::lastDays(30, $this->organization->timezone), ip: $ip);
+    }
+
+    private function authorizeFrom(string $ip): void
+    {
+        app(AiUsageGuard::class)->authorize($this->context($ip), AiRun::FEATURE_PERIOD_SUMMARY);
+        $this->addToAssertionCount(1);
+    }
+
+    private function recordRun(User $user, string $status, int $costMicros = 0): void
+    {
+        AiRun::query()->create([...$this->attributes($this->organization, $user, $status), 'cost_micros' => $costMicros]);
     }
 
     /**
@@ -158,10 +263,10 @@ class AiUsageGuardTest extends TestCase
         ];
     }
 
-    private function assertGuardFails(string $code, int $status, ?int $expectedRetryAfter = null): void
+    private function assertGuardFails(string $code, int $status, ?int $expectedRetryAfter = null, ?string $ip = null): void
     {
         try {
-            app(AiUsageGuard::class)->authorize($this->context(), AiRun::FEATURE_PERIOD_SUMMARY);
+            app(AiUsageGuard::class)->authorize($this->context($ip), AiRun::FEATURE_PERIOD_SUMMARY);
             $this->fail('Expected an AiException.');
         } catch (AiException $exception) {
             $this->assertSame($code, $exception->errorCode);

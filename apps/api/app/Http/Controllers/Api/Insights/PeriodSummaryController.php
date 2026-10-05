@@ -49,6 +49,7 @@ class PeriodSummaryController extends Controller
             $request->user(),
             $request->period(),
             $request->attributes->get('request_id'),
+            $request->ip(),
         );
     }
 }

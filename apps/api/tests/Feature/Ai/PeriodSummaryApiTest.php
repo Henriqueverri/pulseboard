@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Ai;
 
+use App\Console\Commands\DemoCommand;
 use App\Enums\TransactionStatus;
 use App\Exceptions\AiException;
 use App\Models\AiInsight;
@@ -325,6 +326,50 @@ class PeriodSummaryApiTest extends TestCase
 
         $this->assertCount(1, $this->provider->requests());
         $this->assertSame(1, AiRun::query()->where('status', AiRun::STATUS_QUOTA_EXCEEDED)->count());
+    }
+
+    public function test_an_exhausted_monthly_budget_disables_new_generations_but_not_cached_summaries(): void
+    {
+        config(['ai.monthly_budget_usd' => 0.001]);
+        $this->generate()->assertOk();
+        AiRun::query()->update(['cost_micros' => 1_000]);
+
+        $this->generate()->assertOk()->assertJsonPath('meta.insight.cached', true);
+        $this->summary()->assertOk()->assertJsonPath('meta.insight.cached', true);
+
+        $this->createTransaction($this->customer, [[$this->product, 1, '100.00']], TransactionStatus::Paid, '2026-09-28 15:00:00');
+
+        $this->generate()
+            ->assertStatus(503)
+            ->assertExactJson(['message' => 'Insights are currently unavailable.', 'code' => 'ai_disabled'])
+            ->assertHeaderMissing('Retry-After');
+
+        $this->assertCount(1, $this->provider->requests());
+        $this->assertSame(1, AiRun::query()->where('error_code', AiException::DISABLED)->count());
+    }
+
+    public function test_demo_visitors_sharing_the_login_are_limited_per_ip(): void
+    {
+        config(['ai.limits.demo_daily_per_ip' => 1, 'ai.limits.demo_requests_per_minute_per_ip' => 10]);
+        $this->organization->forceFill(['slug' => DemoCommand::ORGANIZATION_SLUG])->save();
+
+        $this->generate()->assertOk();
+        $this->generate()->assertOk()->assertJsonPath('meta.insight.cached', true);
+
+        $this->createTransaction($this->customer, [[$this->product, 1, '100.00']], TransactionStatus::Paid, '2026-09-28 15:00:00');
+
+        $this->generate()
+            ->assertStatus(429)
+            ->assertJsonPath('code', 'ai_quota_exceeded')
+            ->assertHeader('Retry-After');
+
+        $this->actingInOrganization($this->owner, $this->organization)
+            ->withServerVariables(['REMOTE_ADDR' => '203.0.113.9'])
+            ->postJson(self::URI, self::PERIOD)
+            ->assertOk()
+            ->assertJsonPath('meta.insight.cached', false);
+
+        $this->assertCount(2, $this->provider->requests());
     }
 
     public function test_a_generation_in_progress_for_the_same_data_is_never_duplicated(): void

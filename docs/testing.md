@@ -28,7 +28,8 @@ Estratégia de testes e como rodar cada suíte. Visão geral no [README](../READ
   - orçamento de consultas (`IngestQueryBudgetTest`): 1 item e 100 itens usam o mesmo número de queries;
   - do sistema externo ao dashboard (`IngestAnalyticsTest`): uma venda ingerida muda os KPIs na próxima leitura, e as invariantes entre endpoints continuam valendo;
   - logs: uma linha por requisição, sem chave, header `Authorization` ou dados pessoais.
-- Operação: health check, erros JSON em `api/*`, `X-Request-Id` em toda resposta (inclusive 500) e exposto no CORS, trusted proxies (HTTPS e rate limit de login pelo IP real), backfill do histórico de status, `pulseboard:demo` e `pulseboard:release`.
+- Operação: health check, erros JSON em `api/*`, `X-Request-Id` em toda resposta (inclusive 500) e exposto no CORS, trusted proxies (HTTPS e rate limit de login pelo IP real), backfill do histórico de status, `pulseboard:demo`, `pulseboard:release` (inclusive a retenção de IA no start), `pulseboard:ai-prune` (retenção por tabela, todas as organizações, nenhuma outra tabela, mínimo de 32 dias para `ai_runs`) e `pulseboard:ai-usage` (agrupamento, percentis e orçamento).
+- Proteções de IA: orçamento mensal global (soma entre organizações, virada do mês em UTC, `0` bloqueia, cache continua servido) e cota diária por IP só na demo (login compartilhado, outro IP passa, zera à meia-noite da demo, recusas por outra cota não consomem).
 
 **Web**
 

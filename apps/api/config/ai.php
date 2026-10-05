@@ -70,6 +70,24 @@ return [
         'requests_per_minute' => (int) env('AI_REQUESTS_PER_MINUTE', 10),
         // The demo login is shared by every visitor, so the demo is also limited per IP.
         'demo_requests_per_minute_per_ip' => (int) env('AI_DEMO_REQUESTS_PER_MINUTE_PER_IP', 3),
+        'demo_daily_per_ip' => (int) env('AI_DEMO_DAILY_IP_LIMIT', 5),
+    ],
+
+    /*
+    | Global ceiling on the estimated cost (ai_runs.cost_micros) of all
+    | organizations in the calendar month (UTC). Once reached, new generations
+    | answer `ai_disabled` until the next month; cached summaries are still
+    | served. 0 blocks every new generation.
+    */
+    'monthly_budget_usd' => (float) env('AI_MONTHLY_BUDGET_USD', 5),
+
+    /*
+    | Applied by `pulseboard:ai-prune` on every container start. Runs feed the
+    | daily quotas and the monthly budget, so they are kept for at least 32 days.
+    */
+    'retention' => [
+        'insights_days' => (int) env('AI_INSIGHTS_RETENTION_DAYS', 30),
+        'runs_days' => (int) env('AI_RUNS_RETENTION_DAYS', 90),
     ],
 
     'insights' => [
