@@ -1,0 +1,62 @@
+{
+    "id": "direction_incoherent_repaired",
+    "description": "A primeira resposta chama de positiva a receita que caiu e de negativa a queda dos cancelamentos (polaridade invertida); o reparo corrige e só a resposta coerente é exibida.",
+    "category": "robustness",
+    "providers": ["scripted"],
+    "organization": "eval",
+    "period": { "from": "2026-09-01", "to": "2026-09-30" },
+    "scripted": [
+        {
+            "output": {
+                "headline": "Setembro foi um mês de crescimento nas vendas",
+                "overview": "A receita paga avançou sobre agosto, enquanto os cancelamentos preocupam por terem mudado de patamar no período.",
+                "findings": [
+                    {
+                        "kind": "positive",
+                        "title": "Receita em alta",
+                        "explanation": "A receita paga cresceu sobre agosto.",
+                        "evidence": ["kpi.revenue"],
+                        "destination": "analytics.revenue"
+                    },
+                    {
+                        "kind": "negative",
+                        "title": "Cancelamentos",
+                        "explanation": "Os cancelamentos mudaram de patamar.",
+                        "evidence": ["status.canceled"],
+                        "destination": "transactions.canceled"
+                    }
+                ],
+                "attention_points": []
+            }
+        },
+        {
+            "output": {
+                "headline": "Setembro vendeu menos, mas cancelou menos",
+                "overview": "A receita paga recuou frente a agosto, e os cancelamentos também diminuíram, o que é uma boa notícia para a operação.",
+                "findings": [
+                    {
+                        "kind": "negative",
+                        "title": "Receita em queda",
+                        "explanation": "A receita paga ficou abaixo de agosto.",
+                        "evidence": ["kpi.revenue"],
+                        "destination": "analytics.revenue"
+                    },
+                    {
+                        "kind": "positive",
+                        "title": "Menos cancelamentos",
+                        "explanation": "Os cancelamentos diminuíram em relação a agosto.",
+                        "evidence": ["status.canceled"],
+                        "destination": "transactions.canceled"
+                    }
+                ],
+                "attention_points": []
+            }
+        }
+    ],
+    "expect": {
+        "outcome": "succeeded",
+        "run_status": "succeeded",
+        "attempts": 2,
+        "repair_requested": true
+    }
+}

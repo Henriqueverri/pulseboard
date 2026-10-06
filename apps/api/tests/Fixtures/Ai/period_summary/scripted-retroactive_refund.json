@@ -1,0 +1,197 @@
+{
+    "case": "retroactive_refund",
+    "source": "scripted",
+    "model": "scripted",
+    "prompt_version": "period_summary.v1",
+    "catalog": [
+        {
+            "ref": "kpi.revenue",
+            "label": "Receita",
+            "format": "money",
+            "polarity": "positive",
+            "destination": "analytics.revenue",
+            "value": "108355.10",
+            "previous": "79720.30",
+            "change": 35.9
+        },
+        {
+            "ref": "kpi.orders",
+            "label": "Pedidos pagos",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.revenue",
+            "value": 160,
+            "previous": 120,
+            "change": 33.3
+        },
+        {
+            "ref": "kpi.average_order_value",
+            "label": "Ticket médio",
+            "format": "money",
+            "polarity": "positive",
+            "destination": "dashboard",
+            "value": "677.22",
+            "previous": "664.34",
+            "change": 1.9
+        },
+        {
+            "ref": "kpi.customers",
+            "label": "Clientes ativos",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.customers",
+            "value": 48,
+            "previous": 48,
+            "change": 0.0
+        },
+        {
+            "ref": "customers.total",
+            "label": "Base de clientes",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.customers",
+            "value": 70,
+            "previous": 70,
+            "change": 0.0
+        },
+        {
+            "ref": "customers.new",
+            "label": "Clientes novos",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.customers",
+            "value": 4,
+            "previous": 7,
+            "change": -42.9
+        },
+        {
+            "ref": "customers.returning",
+            "label": "Clientes recorrentes",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.customers",
+            "value": 44,
+            "previous": 41,
+            "change": 7.3
+        },
+        {
+            "ref": "products.units_sold",
+            "label": "Unidades vendidas",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.products",
+            "value": 389,
+            "previous": 297,
+            "change": 31.0
+        },
+        {
+            "ref": "products.products_sold",
+            "label": "Produtos vendidos",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.products",
+            "value": 39,
+            "previous": 36,
+            "change": 8.3
+        },
+        {
+            "ref": "status.paid",
+            "label": "Transações pagas",
+            "format": "count",
+            "polarity": "positive",
+            "destination": "analytics.transactions",
+            "value": 160,
+            "previous": 120,
+            "change": 33.3
+        },
+        {
+            "ref": "status.refunded",
+            "label": "Transações reembolsadas",
+            "format": "count",
+            "polarity": "negative",
+            "destination": "transactions.refunded",
+            "value": 11,
+            "previous": 14,
+            "change": -21.4
+        },
+        {
+            "ref": "status.pending",
+            "label": "Transações pendentes",
+            "format": "count",
+            "polarity": "neutral",
+            "destination": "transactions.pending",
+            "value": 2,
+            "previous": 1,
+            "change": 100.0
+        },
+        {
+            "ref": "status.canceled",
+            "label": "Transações canceladas",
+            "format": "count",
+            "polarity": "negative",
+            "destination": "transactions.canceled",
+            "value": 12,
+            "previous": 10,
+            "change": 20.0
+        },
+        {
+            "ref": "product.1",
+            "label": "Teclado mecânico Essential",
+            "format": "money",
+            "polarity": "positive",
+            "destination": "analytics.products",
+            "value": "15993.60",
+            "previous": "12744.90",
+            "change": 25.5
+        },
+        {
+            "ref": "product.2",
+            "label": "Mesa regulável Essential",
+            "format": "money",
+            "polarity": "positive",
+            "destination": "analytics.products",
+            "value": "14777.00",
+            "previous": "5555.60",
+            "change": 166.0
+        },
+        {
+            "ref": "product.3",
+            "label": "Cadeira ergonômica Pro",
+            "format": "money",
+            "polarity": "positive",
+            "destination": "analytics.products",
+            "value": "10849.30",
+            "previous": "7749.50",
+            "change": 40.0
+        },
+        {
+            "ref": "product.4",
+            "label": "Mesa regulável Pro",
+            "format": "money",
+            "polarity": "positive",
+            "destination": "analytics.products",
+            "value": "9599.60",
+            "previous": "0.00",
+            "change": null
+        },
+        {
+            "ref": "product.5",
+            "label": "Caixa de som bluetooth Pro",
+            "format": "money",
+            "polarity": "positive",
+            "destination": "analytics.products",
+            "value": "7797.60",
+            "previous": "4223.70",
+            "change": 84.6
+        }
+    ],
+    "attempts": [
+        {
+            "raw_response": null,
+            "output_text": "{\"headline\":\"Agosto teve reembolsos registrados depois do fechamento\",\"overview\":\"Os números de agosto refletem os status atuais das transações: reembolsos feitos depois do mês reduzem as vendas pagas do período original.\",\"findings\":[{\"kind\":\"attention\",\"title\":\"Reembolsos no período\",\"explanation\":\"Parte das vendas pagas do mês foi reembolsada, o que reduz a receita do período.\",\"evidence\":[\"status.refunded\"],\"destination\":\"transactions.refunded\"}],\"attention_points\":[{\"text\":\"Revise as transações reembolsadas para entender a mudança.\",\"evidence\":[\"status.refunded\"]}]}",
+            "refusal": null,
+            "incomplete_reason": null,
+            "errors": []
+        }
+    ]
+}

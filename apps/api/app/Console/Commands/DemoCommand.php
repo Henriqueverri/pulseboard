@@ -21,6 +21,11 @@ use Illuminate\Support\Facades\DB;
  * today (only days after the latest sale are added). --refresh rebuilds the demo
  * organization's catalog and ~6-month history so it ends today again, and removes
  * the API keys visitors created. The command itself never creates API keys.
+ *
+ * While AI_ENABLED is on, the demo organization (and only it) is opted into
+ * Insights on behalf of the demo owner, so a visitor who turned it off finds it on
+ * again after the next start. With AI_ENABLED off the opt-in is left as it is,
+ * like PUT /organization/insights, which refuses to enable it then.
  */
 class DemoCommand extends Command
 {
@@ -60,6 +65,7 @@ class DemoCommand extends Command
         if ($organization !== null && ! $this->option('refresh')) {
             [$filled, $added] = DB::transaction(function () use ($organization, $accounts, $password): array {
                 $this->syncAccounts($organization, $accounts, $password);
+                $this->optIntoInsights($organization, $accounts[Organization::ROLE_OWNER]['email']);
                 $seeder = new DemoDataSeeder;
 
                 return [$seeder->backfillExternalIds($organization), $seeder->extend($organization)];
@@ -88,6 +94,7 @@ class DemoCommand extends Command
             }
 
             $this->syncAccounts($organization, $accounts, $password);
+            $this->optIntoInsights($organization, $accounts[Organization::ROLE_OWNER]['email']);
 
             (new DemoDataSeeder)->setContainer($this->laravel)->__invoke(['organization' => $organization]);
         });
@@ -147,6 +154,16 @@ class DemoCommand extends Command
 
             $organization->users()->syncWithoutDetaching([$user->id => ['role' => $role]]);
         }
+    }
+
+    private function optIntoInsights(Organization $organization, string $ownerEmail): void
+    {
+        if (! config('ai.enabled') || $organization->insightsEnabled()) {
+            return;
+        }
+
+        $organization->enableInsights(User::query()->where('email', $ownerEmail)->first());
+        $this->info('Insights enabled for the demo organization.');
     }
 
     private function wipe(Organization $organization): void

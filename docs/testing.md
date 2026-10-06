@@ -28,7 +28,8 @@ Estratégia de testes e como rodar cada suíte. Visão geral no [README](../READ
   - orçamento de consultas (`IngestQueryBudgetTest`): 1 item e 100 itens usam o mesmo número de queries;
   - do sistema externo ao dashboard (`IngestAnalyticsTest`): uma venda ingerida muda os KPIs na próxima leitura, e as invariantes entre endpoints continuam valendo;
   - logs: uma linha por requisição, sem chave, header `Authorization` ou dados pessoais.
-- Operação: health check, erros JSON em `api/*`, `X-Request-Id` em toda resposta (inclusive 500) e exposto no CORS, trusted proxies (HTTPS e rate limit de login pelo IP real), backfill do histórico de status, `pulseboard:demo` e `pulseboard:release`.
+- Operação: health check, erros JSON em `api/*`, `X-Request-Id` em toda resposta (inclusive 500) e exposto no CORS, trusted proxies (HTTPS e rate limit de login pelo IP real), backfill do histórico de status, `pulseboard:demo` (inclusive o opt-in de insights só da demo e só com `AI_ENABLED=true`), `pulseboard:release` (inclusive a retenção de IA no start), `pulseboard:ai-prune` (retenção por tabela, todas as organizações, nenhuma outra tabela, mínimo de 32 dias para `ai_runs`) e `pulseboard:ai-usage` (agrupamento, percentis e orçamento).
+- Proteções de IA: orçamento mensal global (soma entre organizações, virada do mês em UTC, `0` bloqueia, cache continua servido) e cota diária por IP só na demo (login compartilhado, outro IP passa, zera à meia-noite da demo, recusas por outra cota não consomem).
 
 **Web**
 
@@ -39,7 +40,9 @@ Estratégia de testes e como rodar cada suíte. Visão geral no [README](../READ
 - Transações: origem e `external_id` na lista, linha do tempo na ordem da API, histórico vazio, ID da requisição no erro.
 - API Keys: visão de member sem ações; o segredo aparece uma vez e depois não está no DOM, no payload, no `localStorage` nem no `sessionStorage`; cópia; aviso de expiração limitada; 422 de limite e de campo; 403; revogação com confirmação; o guia de integração só com placeholders.
 
-**E2E** — dois fluxos contra o build de produção e a API real:
+**E2E** — três fluxos contra o build de produção e a API real:
+
+- `insights.spec.ts` (API com `AI_ENABLED=true` e `AI_PROVIDER=scripted`: nenhuma chave, nenhuma chamada à OpenAI): o opt-in da demo feito pelo `pulseboard:demo` aparece ligado em Configurações › Insights → o dashboard em "últimos 90 dias" mostra o estado "ainda não gerado" → gerar → resultado com o rótulo de IA, o foco de volta no título, o achado e a ressalva de período parcial → a evidência mostra o mesmo valor do KPI de Receita → axe sem violações (configurações, estado inicial e resultado em desktop e mobile) → recarregar serve o cache sem gerar de novo → o link do achado leva ao destino com o mesmo período. O provedor roteirizado sempre escolhe o destino `dashboard`; o mapeamento dos outros destinos fica nos testes Vitest.
 
 - `smoke.spec.ts`: login → dashboard → criar, editar e excluir um produto → abrir uma transação e ver o ciclo de vida → navegar pelas abas de analytics mantendo o período.
 - `integration.spec.ts`: criar uma API Key pela UI e ler o segredo uma vez → axe sem violações na página de API Keys (desktop, mobile e com o diálogo do segredo aberto) → ingerir uma transação `pending` com a chave, reenviar (200) e marcar como paga → achar a transação pelo `external_id` e conferir a linha do tempo → revogar a chave e receber 401 `invalid_api_key`. A chave é criada pelo próprio teste, em tempo de execução: nenhuma chave fica no repositório nem nos secrets da CI.
@@ -62,6 +65,20 @@ docker exec pulseboard-postgres createdb -U pulseboard pulseboard_test
 DB_DATABASE=pulseboard_test php artisan test
 ```
 
+## Avaliação de IA
+
+Fora do PHPUnit: um comando que roda os casos de `tests/AiEval/cases` pelo serviço real do resumo, num SQLite em memória próprio (não toca no banco do `.env`), e grava um relatório em `storage/ai-eval/reports/`. Detalhes dos casos e avaliadores em [ai.md](ai.md#avaliação-do-resumo-implementada).
+
+```bash
+cd apps/api
+php artisan pulseboard:ai-eval                         # provedor roteirizado: determinístico, sem rede (o que a CI roda)
+php artisan pulseboard:ai-eval --case=known_period     # um caso
+php artisan pulseboard:ai-eval --provider=openai --model=gpt-6-luna --repeat=3   # modelo real: exige OPENAI_API_KEY e custa dinheiro
+php artisan pulseboard:ai-eval --provider=openai --record                        # grava as respostas reais como fixtures dos testes de parsing
+```
+
+O comando sai com código 1 se algum caso falhar ou se uma métrica ficar abaixo do threshold, e se recusa a rodar com `APP_ENV=production`.
+
 ## Web
 
 ```bash
@@ -74,12 +91,13 @@ bun run generate    # build estático em .output/public
 
 ## E2E (Playwright)
 
-Os testes fazem login com a conta owner da demo (`pulseboard:demo`) e escrevem no banco (o fluxo de integração cria uma chave e uma transação, que não podem ser apagadas), então use um banco descartável, nunca o de desenvolvimento nem o de produção. A senha vem de `DEMO_PASSWORD`, que o `pulseboard:demo` e o Playwright leem do ambiente; use uma senha descartável (a CI gera uma por execução). `E2E_EMAIL` / `E2E_PASSWORD` sobrescrevem a conta, se precisar. Com o front de produção servido em `localhost:3000` (pare o `bun run dev` antes):
+Os testes fazem login com a conta owner da demo (`pulseboard:demo`) e escrevem no banco (o fluxo de integração cria uma chave e uma transação, que não podem ser apagadas; o de insights grava um resumo em cache), então use um banco descartável, recém-criado, nunca o de desenvolvimento nem o de produção. A API sobe com `AI_ENABLED=true AI_PROVIDER=scripted`, para o `pulseboard:demo` ativar os insights da demo e a geração usar o provedor roteirizado. Para rodar de novo o fluxo de insights sem recriar o banco, apague antes o resumo gerado (`delete from ai_insights;`). A senha vem de `DEMO_PASSWORD`, que o `pulseboard:demo` e o Playwright leem do ambiente; use uma senha descartável (a CI gera uma por execução). `E2E_EMAIL` / `E2E_PASSWORD` sobrescrevem a conta, se precisar. Com o front de produção servido em `localhost:3000` (pare o `bun run dev` antes):
 
 ```bash
 docker exec pulseboard-postgres createdb -U pulseboard pulseboard_e2e
 export DEMO_PASSWORD="$(openssl rand -hex 24)"   # nos três terminais (ou rode tudo no mesmo shell)
 export DB_CONNECTION=pgsql DB_URL= DB_HOST=127.0.0.1 DB_PORT=5432 DB_USERNAME=pulseboard DB_PASSWORD=pulseboard
+export AI_ENABLED=true AI_PROVIDER=scripted        # insights com o provedor roteirizado, sem chave
 
 # terminal 1 — API no banco descartável
 cd apps/api
@@ -105,8 +123,8 @@ E2E_API_URL=http://localhost:8001/api/v1 bun run test:e2e
 
 | Job | O que valida |
 |-----|--------------|
-| `api` | `composer install`, Pint, `migrate` em PostgreSQL 16 limpo, PHPUnit completo em PostgreSQL (sem os skips do SQLite) |
+| `api` | `composer install`, Pint, `migrate` em PostgreSQL 16 limpo, PHPUnit completo em PostgreSQL (sem os skips do SQLite), avaliação de IA com o provedor roteirizado |
 | `web` | `bun install --frozen-lockfile`, lint, typecheck, Vitest, `nuxt generate` |
-| `e2e` | PostgreSQL descartável com `migrate:fresh` + `pulseboard:demo` (`DEMO_PASSWORD` aleatória por execução, mascarada nos logs) → API (`artisan serve`) → build estático (`serve:static`) → Playwright (smoke + fluxo de integração com axe); logs e traces como artefato em caso de falha |
+| `e2e` | PostgreSQL descartável com `migrate:fresh` + `pulseboard:demo` (`DEMO_PASSWORD` aleatória por execução, mascarada nos logs) → API (`artisan serve`, com `AI_ENABLED=true` e `AI_PROVIDER=scripted`) → build estático (`serve:static`) → Playwright (insights, smoke e fluxo de integração, com axe); logs e traces como artefato em caso de falha |
 
 O `e2e` só roda depois que `api` e `web` passam. O deploy da API no Render espera todos os checks.

@@ -140,11 +140,25 @@ export function asApiError(error: unknown): ApiError | null {
   return cause instanceof ApiError ? cause : null
 }
 
+/** Insights failures (`AiException`), by their stable `code`. */
+const CODE_MESSAGES: Record<string, string> = {
+  ai_disabled: 'Os insights estão indisponíveis no momento.',
+  ai_not_enabled: 'Os insights não estão ativados nesta organização.',
+  ai_quota_exceeded: 'A cota diária de insights desta organização foi atingida.',
+  ai_provider_unavailable: 'O serviço de IA está indisponível. Tente novamente em instantes.',
+  ai_timeout: 'A IA demorou demais para responder. Tente novamente.',
+  ai_invalid_output: 'A resposta da IA não passou na validação e foi descartada. Tente novamente.',
+}
+
 /** User-facing message for any error thrown by a request. */
 export function errorMessage(rawError: unknown, fallback = 'Algo deu errado. Tente novamente.'): string {
   const error = asApiError(rawError)
 
   if (error) {
+    const byCode = error.code ? CODE_MESSAGES[error.code] : undefined
+    if (byCode) {
+      return byCode
+    }
     if (error.isNetwork) {
       return 'Não foi possível conectar à API. Verifique sua conexão.'
     }

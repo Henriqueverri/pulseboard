@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class Organization extends Model
@@ -38,6 +39,55 @@ class Organization extends Model
     protected $attributes = [
         'timezone' => self::DEFAULT_TIMEZONE,
     ];
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'ai_insights_enabled_at' => 'datetime',
+        ];
+    }
+
+    /**
+     * Whether an owner opted this organization into PulseBoard Insights.
+     * AI_ENABLED (config ai.enabled) is checked separately by AiUsageGuard.
+     */
+    public function insightsEnabled(): bool
+    {
+        return $this->ai_insights_enabled_at !== null;
+    }
+
+    /**
+     * Idempotent: enabling again keeps who enabled it first and when.
+     */
+    public function enableInsights(?User $by): void
+    {
+        if ($this->insightsEnabled()) {
+            return;
+        }
+
+        $this->forceFill([
+            'ai_insights_enabled_at' => now(),
+            'ai_insights_enabled_by' => $by?->id,
+        ])->save();
+    }
+
+    /**
+     * Opting out also deletes every cached insight of the organization.
+     */
+    public function disableInsights(): void
+    {
+        DB::transaction(function (): void {
+            $this->forceFill([
+                'ai_insights_enabled_at' => null,
+                'ai_insights_enabled_by' => null,
+            ])->save();
+
+            AiInsight::query()->forOrganization($this)->delete();
+        });
+    }
 
     /**
      * @return BelongsToMany<User, $this>

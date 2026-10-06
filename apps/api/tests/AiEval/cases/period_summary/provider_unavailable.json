@@ -1,0 +1,14 @@
+{
+    "id": "provider_unavailable",
+    "description": "O provedor falha (5xx, 429 ou conexão, depois do retry do adapter): ai_provider_unavailable, run provider_error e nada em cache.",
+    "category": "robustness",
+    "providers": ["scripted"],
+    "organization": "eval",
+    "period": { "from": "2026-09-01", "to": "2026-09-30" },
+    "scripted": [{ "failure": "ai_provider_unavailable" }],
+    "expect": {
+        "outcome": "ai_provider_unavailable",
+        "run_status": "provider_error",
+        "attempts": 1
+    }
+}

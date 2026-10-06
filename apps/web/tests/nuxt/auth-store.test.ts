@@ -17,8 +17,8 @@ vi.mock('~/repositories/authRepository', () => ({
 }))
 
 const user = { id: 'u1', name: 'Owner', email: 'owner@example.com' }
-const orgA: Organization = { id: '0199a000-0000-7000-8000-00000000000a', name: 'A', slug: 'a', currency: 'BRL', timezone: 'America/Sao_Paulo', role: 'owner' }
-const orgB: Organization = { id: '0199a000-0000-7000-8000-00000000000b', name: 'B', slug: 'b', currency: 'USD', timezone: 'UTC', role: 'member' }
+const orgA: Organization = { id: '0199a000-0000-7000-8000-00000000000a', name: 'A', slug: 'a', currency: 'BRL', timezone: 'America/Sao_Paulo', insights: { available: false, enabled: false }, role: 'owner' }
+const orgB: Organization = { id: '0199a000-0000-7000-8000-00000000000b', name: 'B', slug: 'b', currency: 'USD', timezone: 'UTC', insights: { available: false, enabled: false }, role: 'member' }
 
 function mePayload(current: Organization | null) {
   return { user, organizations: [orgA, orgB], current_organization: current }

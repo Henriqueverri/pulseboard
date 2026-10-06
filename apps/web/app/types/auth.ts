@@ -6,6 +6,15 @@ export interface User {
   email: string
 }
 
+/**
+ * PulseBoard Insights flags: `available` is the global switch (AI_ENABLED),
+ * `enabled` is the organization's opt-in (changed by an owner).
+ */
+export interface OrganizationInsights {
+  available: boolean
+  enabled: boolean
+}
+
 /** `OrganizationResource`; `role` is present when loaded through the user's membership. */
 export interface Organization {
   id: string
@@ -13,6 +22,7 @@ export interface Organization {
   slug: string
   currency: string
   timezone: string
+  insights: OrganizationInsights
   role?: OrganizationRole
 }
 

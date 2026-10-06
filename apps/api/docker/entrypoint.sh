@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Container start-up: config cache, migrations + demo seed, then PHP-FPM and Nginx.
+# Container start-up: config cache, migrations + demo seed + AI retention, then PHP-FPM and Nginx.
 # Any failing step stops the container, so Render keeps the previous deploy live.
 set -Eeuo pipefail
 
@@ -30,7 +30,7 @@ done
 log "Caching configuration, routes, events and views."
 php artisan optimize
 
-log "Running migrations and the demo seed."
+log "Running migrations, the demo seed and the AI retention."
 php artisan pulseboard:release
 
 sed "s/__PORT__/${PORT}/g" /etc/nginx/pulseboard.conf.template > /tmp/nginx/nginx.conf

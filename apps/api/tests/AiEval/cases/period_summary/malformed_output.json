@@ -1,0 +1,18 @@
+{
+    "id": "malformed_output",
+    "description": "O provedor devolve texto que não é JSON e, no reparo, uma resposta truncada: ai_invalid_output, nada em cache, run invalid_output com duas tentativas.",
+    "category": "robustness",
+    "providers": ["scripted"],
+    "organization": "eval",
+    "period": { "from": "2026-09-01", "to": "2026-09-30" },
+    "scripted": [
+        { "raw": "Claro! Aqui está o resumo do período: as vendas foram boas." },
+        { "incomplete": true }
+    ],
+    "expect": {
+        "outcome": "ai_invalid_output",
+        "run_status": "invalid_output",
+        "attempts": 2,
+        "repair_requested": true
+    }
+}

@@ -6,6 +6,7 @@ useHead({ title: 'Dashboard · PulseBoard' })
 const period = useReportingPeriod()
 const { kpis, revenue, status, products, customers } = useDashboard(period)
 const { currency } = useOrganization()
+const { available: insightsAvailable } = useInsightsAvailability()
 
 const loading = (state: { status: Ref<string>, data: Ref<unknown> }) =>
   state.status.value === 'pending' && !state.data.value
@@ -55,6 +56,11 @@ const customerItems = computed(() => customerRankingItems(customers.data.value?.
         :refreshing="refreshing(kpis)"
         :error="kpis.error.value"
         @retry="kpis.refresh()"
+      />
+
+      <InsightsCard
+        v-if="insightsAvailable"
+        :period="period"
       />
 
       <div class="grid gap-6 lg:grid-cols-3">

@@ -1,0 +1,35 @@
+{
+    "id": "retroactive_refund",
+    "description": "Vendas pagas em agosto reembolsadas hoje: o reembolso altera o período original e a ressalva status_is_current acompanha o resumo.",
+    "category": "quality",
+    "organization": "eval",
+    "period": { "from": "2026-08-01", "to": "2026-08-31" },
+    "setup": [{ "step": "retroactive_refund", "count": 3 }],
+    "scripted": [
+        {
+            "output": {
+                "headline": "Agosto teve reembolsos registrados depois do fechamento",
+                "overview": "Os números de agosto refletem os status atuais das transações: reembolsos feitos depois do mês reduzem as vendas pagas do período original.",
+                "findings": [
+                    {
+                        "kind": "attention",
+                        "title": "Reembolsos no período",
+                        "explanation": "Parte das vendas pagas do mês foi reembolsada, o que reduz a receita do período.",
+                        "evidence": ["status.refunded"],
+                        "destination": "transactions.refunded"
+                    }
+                ],
+                "attention_points": [
+                    { "text": "Revise as transações reembolsadas para entender a mudança.", "evidence": ["status.refunded"] }
+                ]
+            }
+        }
+    ],
+    "expect": {
+        "outcome": "succeeded",
+        "caveats_include": ["status_is_current"],
+        "caveats_exclude": ["partial_period", "no_sales", "no_previous_data"],
+        "refund_reflected": true
+    },
+    "rubric": "Menciona os reembolsos e que status atuais alteram o período da venda original."
+}

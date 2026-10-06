@@ -1,0 +1,14 @@
+{
+    "id": "refusal",
+    "description": "O modelo recusa a tarefa: ai_invalid_output sem tentativa de reparo, run refused e nada em cache.",
+    "category": "robustness",
+    "providers": ["scripted"],
+    "organization": "eval",
+    "period": { "from": "2026-09-01", "to": "2026-09-30" },
+    "scripted": [{ "refusal": "I'm sorry, I cannot assist with that request." }],
+    "expect": {
+        "outcome": "ai_invalid_output",
+        "run_status": "refused",
+        "attempts": 1
+    }
+}

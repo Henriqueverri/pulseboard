@@ -1,0 +1,14 @@
+{
+    "id": "provider_timeout",
+    "description": "O provedor não responde dentro do prazo: ai_timeout, run timeout e nada em cache.",
+    "category": "robustness",
+    "providers": ["scripted"],
+    "organization": "eval",
+    "period": { "from": "2026-09-01", "to": "2026-09-30" },
+    "scripted": [{ "failure": "ai_timeout" }],
+    "expect": {
+        "outcome": "ai_timeout",
+        "run_status": "timeout",
+        "attempts": 1
+    }
+}

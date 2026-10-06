@@ -1,0 +1,48 @@
+{
+    "id": "hallucination_never_shown",
+    "description": "As duas respostas alucinam (números no texto, depois uma referência inexistente): ai_invalid_output, e nenhuma delas é exibida ou cacheada.",
+    "category": "robustness",
+    "providers": ["scripted"],
+    "organization": "eval",
+    "period": { "from": "2026-09-01", "to": "2026-09-30" },
+    "scripted": [
+        {
+            "output": {
+                "headline": "Receita de R$ 48.200 em setembro",
+                "overview": "Foram 312 pedidos pagos no mês, um crescimento de 15% sobre agosto, com ticket médio de R$ 154.",
+                "findings": [
+                    {
+                        "kind": "neutral",
+                        "title": "Receita em 2026",
+                        "explanation": "A receita somou 48 mil reais.",
+                        "evidence": ["kpi.revenue"],
+                        "destination": "analytics.revenue"
+                    }
+                ],
+                "attention_points": []
+            }
+        },
+        {
+            "output": {
+                "headline": "A margem de lucro melhorou no período",
+                "overview": "A margem de lucro e o custo de aquisição de clientes melhoraram, segundo os dados do período analisado.",
+                "findings": [
+                    {
+                        "kind": "neutral",
+                        "title": "Margem de lucro",
+                        "explanation": "A margem melhorou em relação ao período anterior.",
+                        "evidence": ["kpi.margin", "customers.acquisition_cost"],
+                        "destination": "dashboard"
+                    }
+                ],
+                "attention_points": []
+            }
+        }
+    ],
+    "expect": {
+        "outcome": "ai_invalid_output",
+        "run_status": "invalid_output",
+        "attempts": 2,
+        "repair_requested": true
+    }
+}

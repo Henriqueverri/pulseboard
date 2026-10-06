@@ -12,6 +12,7 @@ const ORG = {
   slug: 'demo',
   currency: 'BRL',
   timezone: 'America/Sao_Paulo',
+  insights: { available: false, enabled: false },
   role: 'owner' as const,
 }
 

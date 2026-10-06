@@ -1,0 +1,34 @@
+{
+    "id": "no_paid_sales_period",
+    "description": "Período com transações, mas nenhuma paga (só reembolso e cancelamento): no_sales com status_is_current, nenhum achado positivo.",
+    "category": "quality",
+    "organization": "small",
+    "period": { "from": "2026-09-27", "to": "2026-09-29" },
+    "scripted": [
+        {
+            "output": {
+                "headline": "O período terminou sem nenhuma venda paga",
+                "overview": "Houve movimentação, mas apenas um reembolso e um cancelamento, então a receita paga do período ficou zerada.",
+                "findings": [
+                    {
+                        "kind": "attention",
+                        "title": "Reembolso e cancelamento sem vendas pagas",
+                        "explanation": "As transações do período terminaram reembolsadas ou canceladas.",
+                        "evidence": ["status.refunded", "status.canceled"],
+                        "destination": "analytics.transactions"
+                    }
+                ],
+                "attention_points": [
+                    { "text": "Confira o motivo do reembolso e do cancelamento.", "evidence": ["status.refunded"] }
+                ]
+            }
+        }
+    ],
+    "expect": {
+        "outcome": "succeeded",
+        "caveats_include": ["no_sales", "status_is_current"],
+        "caveats_exclude": ["low_volume", "no_previous_data", "partial_period"],
+        "forbidden_kinds": ["positive"]
+    },
+    "rubric": "Explica que não houve receita paga e aponta o reembolso e o cancelamento, sem chamar nada de positivo."
+}

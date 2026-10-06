@@ -72,3 +72,19 @@ services:
         value: demo@example.com
       - key: DEMO_MEMBER_EMAIL
         value: demo-member@example.com
+      # PulseBoard Insights: off until the key is set and the real-model evaluation passed
+      # (docs/deployment.md, "Ligar os Insights com o provedor real").
+      - key: AI_ENABLED
+        value: "false"
+      - key: AI_PROVIDER
+        value: openai
+      - key: AI_MODEL
+        value: gpt-6-luna
+      - key: OPENAI_API_KEY
+        sync: false
+      # Global ceiling on the estimated monthly cost; once reached, new generations answer ai_disabled.
+      - key: AI_MONTHLY_BUDGET_USD
+        value: "2"
+      # The demo login is shared, so generations are also capped per visitor IP per day.
+      - key: AI_DEMO_DAILY_IP_LIMIT
+        value: "5"

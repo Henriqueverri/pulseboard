@@ -10,7 +10,7 @@ describe('useReportingPeriod', () => {
     // 01:00 UTC on Sep 30 is still Sep 29 in São Paulo: presets must end on the organization's today.
     vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-09-30T01:00:00Z') })
     useAuthStore().setSession({ id: 'u1', name: 'Owner', email: 'owner@example.com' }, {
-      id: '0199a000-0000-7000-8000-00000000000a', name: 'Loja', slug: 'loja', currency: 'BRL', timezone: 'America/Sao_Paulo', role: 'owner',
+      id: '0199a000-0000-7000-8000-00000000000a', name: 'Loja', slug: 'loja', currency: 'BRL', timezone: 'America/Sao_Paulo', insights: { available: false, enabled: false }, role: 'owner',
     })
     router = useRouter()
     await router.replace({ path: '/dashboard', query: {} })

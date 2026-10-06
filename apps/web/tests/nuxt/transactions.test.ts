@@ -17,7 +17,7 @@ vi.mock('~/repositories/transactionRepository', () => ({
 
 const user = { id: 'u1', name: 'Member', email: 'member@example.com' }
 const org: Organization = {
-  id: '0199a000-0000-7000-8000-00000000000a', name: 'Loja', slug: 'loja', currency: 'BRL', timezone: 'America/Sao_Paulo', role: 'member',
+  id: '0199a000-0000-7000-8000-00000000000a', name: 'Loja', slug: 'loja', currency: 'BRL', timezone: 'America/Sao_Paulo', insights: { available: false, enabled: false }, role: 'member',
 }
 
 const customerId = '0199a000-0000-7000-8000-0000000000c1'
