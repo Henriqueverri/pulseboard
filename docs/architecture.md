@@ -24,6 +24,7 @@ Os tipos TypeScript do front espelham os contratos da API de forma deliberada e 
 ```mermaid
 erDiagram
   users ||--o{ organization_user : membership
+  users ||--o{ personal_access_tokens : devices
   organizations ||--o{ organization_user : members
   organizations ||--o{ products : has
   organizations ||--o{ customers : has
@@ -45,8 +46,18 @@ erDiagram
 - `transactions.source` (`seed` ou `ingest`) indica a origem; `transactions.api_key_id` registra qual chave criou a transação.
 - `transactions.status` é o estado atual, denormalizado para o analytics; `transaction_status_changes` guarda a cadeia completa de mudanças, com `UNIQUE (transaction_id, to_status)`.
 - `api_keys` guarda o `prefix` público (único) e só o `secret_hash` (SHA-256), nunca a chave.
+- `personal_access_tokens` (Sanctum) guarda os tokens dos clientes nativos: `tokenable_id` UUID (`uuidMorphs`, porque `users` usa UUID), `name` = dispositivo, só o SHA-256 do token e `expires_at`.
 
-## Autenticação: Sanctum SPA
+## Autenticação: sessão no web, token no mobile
+
+A API interna tem dois clientes com necessidades diferentes, e cada um usa o mecanismo do Sanctum feito para ele. Depois de autenticar, o caminho é o mesmo: `EnsureOrganizationContext` e as Policies usam `$request->user()`, que funciona igual para sessão ou token.
+
+| Cliente | Credencial | Por quê |
+|---------|-----------|---------|
+| **Web (navegador)** | **Sessão em cookie httpOnly + CSRF** | O navegador guarda o cookie fora do alcance do JavaScript: um XSS não lê a credencial |
+| **Mobile (nativo)** | **Personal Access Token, 30 dias, um por dispositivo** | Fora do navegador não há cookie jar, CSRF e `SameSite` confiáveis; o app guarda o token no Keychain/Keystore |
+
+### Web: Sanctum SPA
 
 | Abordagem | Segurança | Observação |
 |-----------|-----------|------------|
@@ -72,6 +83,27 @@ Outros controles:
 - `TRUSTED_PROXIES` para que, atrás do proxy do Render, a API veja HTTPS e o IP real (o rate limit depende disso);
 - `?redirect=` pós-login aceita apenas caminhos internos;
 - headers do front: `X-Frame-Options: DENY`, `frame-ancestors 'none'`, `Permissions-Policy`.
+
+### Mobile: Personal Access Token
+
+| Alternativa | Por que não |
+|-------------|-------------|
+| Cookie/sessão no app nativo | Cookie jar nativo, CSRF e `SameSite` são frágeis fora do navegador |
+| Passport / OAuth2 | Um servidor de autorização inteiro para um cliente first-party |
+| JWT próprio | Reimplementa o que o Sanctum já faz, com revogação mais difícil |
+| Refresh token | O Sanctum não tem; exigiria rotação, detecção de reuso e armazenamento extra. 30 dias + novo login bastam para o uso |
+| **PAT do Sanctum** | **Escolhido:** revogável na hora (linha no banco, só o SHA-256), expiração por token, mesmo guard `auth:sanctum` das rotas internas |
+
+Como funciona:
+
+1. `POST /auth/tokens` com e-mail, senha e `device_name` valida as credenciais pelo provider (o mesmo timebox do login), **sem iniciar sessão**, e devolve o token uma única vez;
+2. um token por dispositivo: emitir de novo para o mesmo `device_name` apaga o anterior; dispositivos diferentes coexistem; os tokens expirados do usuário são apagados na emissão (não há scheduler no Render Free para `sanctum:prune-expired`);
+3. o app manda `Authorization: Bearer <id>|pbm_<segredo>` e `X-Organization-Id`; sem `Origin`/`Referer` de navegador, a requisição não é stateful (sem sessão nem CSRF);
+4. logout revoga o token (`DELETE /auth/tokens/current`, ou `POST /auth/logout`, que com token revoga em vez de mexer em sessão).
+
+Por que o web não muda: o Sanctum tenta primeiro o guard de sessão (`sanctum.guard = ['web']`) e só depois o Bearer, então uma sessão válida continua valendo mesmo com um Bearer inválido junto. O prefixo `pbm_` (`SANCTUM_TOKEN_PREFIX`) serve ao secret scanning e distingue o token da API Key `pb_`.
+
+Trade-offs aceitos: o Sanctum grava `last_used_at` a cada requisição com token (uma escrita por request, aceitável no volume atual); tokens sem abilities (`['*']`) — restringir o mobile a leitura exigiria checagem em todas as rotas e fica como evolução; as contas da demo são compartilhadas, então o app gera um `device_name` com sufixo aleatório para visitantes não derrubarem o token uns dos outros, e `pulseboard:demo --refresh` apaga os tokens dessas contas.
 
 ## Multi-tenancy
 
@@ -138,14 +170,14 @@ sequenceDiagram
 
 ### Duas superfícies de autenticação
 
-| | API interna (front) | API de ingestão (sistemas externos) |
+| | API interna (web e mobile) | API de ingestão (sistemas externos) |
 |---|---|---|
-| Credencial | Sessão Sanctum em cookie httpOnly + CSRF | `Authorization: Bearer` com API Key |
+| Credencial | Sessão Sanctum em cookie httpOnly + CSRF (web) ou Personal Access Token do usuário (mobile) | `Authorization: Bearer` com API Key |
 | Organização | Header `X-Organization-Id`, validado contra a membership | A própria chave; o header é ignorado |
 | Autorização | Policies por papel (owner/member) | Chave válida e da organização; não há usuário |
-| Rate limit | Login e cadastro | 120 req/min por chave |
+| Rate limit | Login, cadastro e emissão de token | 120 req/min por chave |
 
-As duas não se misturam: o Bearer da integração nas rotas internas recebe 401 (o Sanctum foi configurado para não procurar tokens, já que a API é só SPA), e a sessão não autentica a ingestão. O middleware da chave registra o mesmo `CurrentOrganization` da API interna, então escopos de tenant, bindings e services são reaproveitados sem código novo.
+As duas não se misturam: o Bearer da integração nas rotas internas recebe 401 (a chave `pb_…` não tem o formato `<id>|<segredo>` do Sanctum e não corresponde a nenhum hash de `personal_access_tokens`), e nem a sessão nem o PAT autenticam a ingestão (`invalid_api_key`). O middleware da chave registra o mesmo `CurrentOrganization` da API interna, então escopos de tenant, bindings e services são reaproveitados sem código novo.
 
 ### API Keys
 

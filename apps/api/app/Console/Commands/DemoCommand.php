@@ -11,6 +11,7 @@ use App\Models\User;
 use Database\Seeders\DemoDataSeeder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Laravel\Sanctum\PersonalAccessToken;
 
 /**
  * Creates (or refreshes) the public demo organization without touching any other data.
@@ -20,7 +21,8 @@ use Illuminate\Support\Facades\DB;
  * (a demo seeded before they existed) and the sales history is extended up to
  * today (only days after the latest sale are added). --refresh rebuilds the demo
  * organization's catalog and ~6-month history so it ends today again, and removes
- * the API keys visitors created. The command itself never creates API keys.
+ * the API keys visitors created and the demo accounts' access tokens. The command
+ * itself never creates API keys or access tokens.
  *
  * While AI_ENABLED is on, the demo organization (and only it) is opted into
  * Insights on behalf of the demo owner, so a visitor who turned it off finds it on
@@ -36,7 +38,7 @@ class DemoCommand extends Command
     private const MIN_PASSWORD_LENGTH = 12;
 
     protected $signature = 'pulseboard:demo
-        {--refresh : Delete the demo organization\'s API keys, products, customers and transactions and seed them again}';
+        {--refresh : Delete the demo organization\'s API keys, products, customers and transactions and the demo accounts\' access tokens, and seed them again}';
 
     protected $description = 'Create or refresh the public demo organization and its owner/member accounts';
 
@@ -90,7 +92,7 @@ class DemoCommand extends Command
                     'currency' => 'BRL',
                 ]);
             } else {
-                $this->wipe($organization);
+                $this->wipe($organization, $accounts);
             }
 
             $this->syncAccounts($organization, $accounts, $password);
@@ -166,10 +168,19 @@ class DemoCommand extends Command
         $this->info('Insights enabled for the demo organization.');
     }
 
-    private function wipe(Organization $organization): void
+    /**
+     * @param  array<string, array{email: string, name: string}>  $accounts
+     */
+    private function wipe(Organization $organization, array $accounts): void
     {
         // Keys created by visitors go with the data they ingested.
         ApiKey::query()->forOrganization($organization)->delete();
+
+        // The demo accounts are shared: visitors' devices sign in again after a refresh.
+        PersonalAccessToken::query()
+            ->where('tokenable_type', (new User)->getMorphClass())
+            ->whereIn('tokenable_id', User::query()->whereIn('email', array_column($accounts, 'email'))->select('id'))
+            ->delete();
 
         // Items cascade from transactions; they restrict product deletion, hence the order.
         Transaction::query()->forOrganization($organization)->delete();
