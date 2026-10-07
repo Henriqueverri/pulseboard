@@ -78,6 +78,77 @@ export interface RevenueResponse {
   meta: AnalyticsMeta & { granularity: 'day' | 'week' | 'month' };
 }
 
+/** Laravel paginator envelope; only the `meta` fields the app reads. */
+export interface Paginated<T> {
+  data: T[];
+  meta: {
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+  };
+}
+
+export type TransactionStatus = 'paid' | 'refunded' | 'pending' | 'canceled';
+
+/** Where a transaction (or one of its status changes) came from: the demo seed or the ingestion API. */
+export type TransactionSource = 'seed' | 'ingest';
+
+export interface TransactionCustomer {
+  id: string;
+  name: string;
+  email: string;
+  is_deleted: boolean;
+}
+
+interface TransactionRecord {
+  id: string;
+  /** The integrating system's id; null for seeded transactions. */
+  external_id: string | null;
+  source: TransactionSource;
+  status: TransactionStatus;
+  total_amount: Decimal;
+  occurred_at: IsoDateTime;
+  customer: TransactionCustomer;
+}
+
+/** `GET /transactions` row. */
+export interface Transaction extends TransactionRecord {
+  items_count: number;
+}
+
+export interface TransactionItem {
+  id: string;
+  quantity: number;
+  /** Price at purchase time, not the product's current price. */
+  unit_price: Decimal;
+  line_total: Decimal;
+  product: {
+    id: string;
+    name: string;
+    sku: string | null;
+    is_deleted: boolean;
+  };
+}
+
+/**
+ * One lifecycle step: `from_status` is null on creation; `occurred_at` is the business time
+ * reported by the source, `recorded_at` when PulseBoard stored it.
+ */
+export interface TransactionStatusChange {
+  from_status: TransactionStatus | null;
+  to_status: TransactionStatus;
+  occurred_at: IsoDateTime;
+  recorded_at: IsoDateTime;
+  source: TransactionSource;
+}
+
+/** `GET /transactions/{id}`: `status_history` comes in lifecycle order. */
+export interface TransactionDetail extends TransactionRecord {
+  items: TransactionItem[];
+  status_history: TransactionStatusChange[];
+}
+
 export interface IssuedToken extends AuthProfile {
   token: string;
   token_type: 'Bearer';

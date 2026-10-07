@@ -32,11 +32,14 @@ export function startOfMonth(date: CivilDate): CivilDate {
   return `${date.slice(0, 7)}-01`;
 }
 
-const todayFormatters = new Map<string, Intl.DateTimeFormat>();
+const zonedFormatters = new Map<string, Intl.DateTimeFormat>();
 
-/** Today's calendar date in `timezone` — never the device's timezone. */
-export function todayIn(timezone: string, now: Date = new Date()): CivilDate {
-  let formatter = todayFormatters.get(timezone);
+/**
+ * Wall-clock fields of an instant in `timezone`. `en-US` + `formatToParts` keeps the output
+ * independent of the locale data shipped with the JS engine; the app formats the parts itself.
+ */
+function zonedParts(instant: Date, timezone: string) {
+  let formatter = zonedFormatters.get(timezone);
 
   if (!formatter) {
     formatter = new Intl.DateTimeFormat('en-US', {
@@ -44,14 +47,37 @@ export function todayIn(timezone: string, now: Date = new Date()): CivilDate {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
     });
-    todayFormatters.set(timezone, formatter);
+    zonedFormatters.set(timezone, formatter);
   }
 
-  const parts = formatter.formatToParts(now);
+  const parts = formatter.formatToParts(instant);
   const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((candidate) => candidate.type === type)?.value ?? '';
 
-  return `${part('year')}-${part('month')}-${part('day')}`;
+  return { year: part('year'), month: part('month'), day: part('day'), hour: part('hour'), minute: part('minute') };
+}
+
+/** Today's calendar date in `timezone` — never the device's timezone. */
+export function todayIn(timezone: string, now: Date = new Date()): CivilDate {
+  const { year, month, day } = zonedParts(now, timezone);
+
+  return `${year}-${month}-${day}`;
+}
+
+/** API instant → "15/09/2026 11:32" in the organization's timezone; "—" when absent or invalid. */
+export function formatDateTime(iso: string | null | undefined, timezone: string): string {
+  const instant = iso ? new Date(iso) : null;
+
+  if (!instant || Number.isNaN(instant.getTime())) {
+    return '—';
+  }
+
+  const { year, month, day, hour, minute } = zonedParts(instant, timezone);
+
+  return `${day}/${month}/${year} ${hour}:${minute}`;
 }
 
 const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];

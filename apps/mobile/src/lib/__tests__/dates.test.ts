@@ -1,4 +1,4 @@
-import { addDays, daysBetween, formatCivilRange, formatDayMonth, startOfMonth, todayIn } from '../dates';
+import { addDays, daysBetween, formatCivilRange, formatDateTime, formatDayMonth, startOfMonth, todayIn } from '../dates';
 
 describe('todayIn', () => {
   it('uses the organization timezone, not the device one (API doc example)', () => {
@@ -53,5 +53,27 @@ describe('formatting', () => {
     expect(formatCivilRange('2026-08-28', '2026-09-03')).toBe('28 ago – 03 set 2026');
     expect(formatCivilRange('2025-12-15', '2026-01-10')).toBe('15 dez 2025 – 10 jan 2026');
     expect(formatCivilRange('2026-09-01', '2026-09-01')).toBe('01 set 2026');
+  });
+});
+
+describe('formatDateTime', () => {
+  it('shows the instant in the organization timezone, 24-hour clock', () => {
+    expect(formatDateTime('2026-09-01T02:59:59Z', 'America/Sao_Paulo')).toBe('31/08/2026 23:59');
+    expect(formatDateTime('2026-09-01T02:59:59Z', 'UTC')).toBe('01/09/2026 02:59');
+    expect(formatDateTime('2026-09-15T14:32:00.000000Z', 'Asia/Tokyo')).toBe('15/09/2026 23:32');
+  });
+
+  it('writes midnight as 00, not 24', () => {
+    expect(formatDateTime('2026-09-01T03:00:00Z', 'America/Sao_Paulo')).toBe('01/09/2026 00:00');
+  });
+
+  it('follows daylight saving time', () => {
+    expect(formatDateTime('2026-07-01T16:00:00Z', 'America/New_York')).toBe('01/07/2026 12:00');
+    expect(formatDateTime('2026-12-01T16:00:00Z', 'America/New_York')).toBe('01/12/2026 11:00');
+  });
+
+  it('shows a dash for missing or invalid values', () => {
+    expect(formatDateTime(null, 'UTC')).toBe('—');
+    expect(formatDateTime('not a date', 'UTC')).toBe('—');
   });
 });

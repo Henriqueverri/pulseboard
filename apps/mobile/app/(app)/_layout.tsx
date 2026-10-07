@@ -18,6 +18,8 @@ export default function AppLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Início' }} />
+      {/* The transactions stack draws its own header (list → detail). */}
+      <Tabs.Screen name="transactions" options={{ title: 'Transações', headerShown: false }} />
       <Tabs.Screen name="account" options={{ title: 'Conta' }} />
     </Tabs>
   );

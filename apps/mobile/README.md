@@ -25,7 +25,7 @@ npm start              # Expo Go ou emulador
 |--------|-----------|
 | `npm start` | Dev server do Expo |
 | `npm run lint` | ESLint (`eslint-config-expo`) |
-| `npm run typecheck` | `tsc --noEmit` |
+| `npm run typecheck` | Gera os tipos das rotas (`expo customize tsconfig.json`, typed routes) e roda `tsc --noEmit` |
 | `npm test` | Jest (`jest-expo`) + Testing Library + MSW |
 
 ## Autenticação
@@ -48,12 +48,21 @@ Personal Access Token do Sanctum (`POST /api/v1/auth/tokens`), sem cookie, sem r
 - Valores monetários chegam como string decimal e são formatados com a moeda da organização. `change: null` é exibido como "sem base de comparação"; variação abaixo de 1% como "estável".
 - Query keys incluem a organização (`['org', id, ...]`). Só erros de rede e 5xx são repetidos automaticamente.
 
+## Transações
+
+`GET /transactions` e `GET /transactions/{id}`, somente leitura:
+
+- Lista paginada com scroll infinito (`per_page=20`, próxima página enquanto `meta.current_page < meta.last_page`) e pull-to-refresh; falha ao carregar mais mantém as linhas e oferece nova tentativa.
+- Filtros enviados à API: status, período (mesmos presets do dashboard, no timezone da organização) e busca `q` (nome/e-mail do cliente, ID externo ou ID), aplicada ao confirmar no teclado.
+- Linha: cliente, valor, status, data/hora no timezone da organização e selo "Integração" para transações ingeridas.
+- Detalhe: itens, cliente, identificação e linha do tempo de `status_history` na ordem da API, com horário de registro quando difere do horário do evento. ID inexistente ou de outra organização (404) mostra "Transação não encontrada"; 401 volta ao login; 403 de organização volta à escolha de organização.
+
 ## Estrutura
 
 ```text
 app/          rotas (Expo Router)
 src/api/      client HTTP (Bearer, X-Organization-Id, ApiError), endpoints tipados, QueryClient
-src/features/ telas por domínio (dashboard)
+src/features/ componentes e hooks por domínio (dashboard, transactions)
 src/lib/      datas por timezone, períodos, dinheiro, comparações
 src/session/  sessão e SecureStore
 src/ui/       tema e componentes base

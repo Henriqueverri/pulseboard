@@ -1,4 +1,13 @@
-import type { AuthProfile, DashboardResponse, IssuedToken, Organization, RevenueResponse } from '@/api/types';
+import type {
+  AuthProfile,
+  DashboardResponse,
+  IssuedToken,
+  Organization,
+  Paginated,
+  RevenueResponse,
+  Transaction,
+  TransactionDetail,
+} from '@/api/types';
 
 /** Shapes copied from real API responses (`docs/api.md`), ids shortened. */
 export const demoStore: Organization = {
@@ -70,4 +79,69 @@ export const REVENUE: RevenueResponse = {
   ],
   summary: { revenue: DASHBOARD.data.revenue, orders: DASHBOARD.data.orders },
   meta: { ...ANALYTICS_META, granularity: 'day' },
+};
+
+export function transactionId(index: number): string {
+  return `7c1e0000-0000-4000-8000-${String(index).padStart(12, '0')}`;
+}
+
+export function transaction(index: number, overrides: Partial<Transaction> = {}): Transaction {
+  return {
+    id: transactionId(index),
+    external_id: null,
+    source: 'seed',
+    status: 'paid',
+    total_amount: '150.00',
+    occurred_at: '2026-09-15T14:32:00.000000Z',
+    items_count: 2,
+    customer: { id: '5b2e0000-0000-4000-8000-000000000001', name: `Cliente ${index}`, email: `cliente${index}@example.com`, is_deleted: false },
+    ...overrides,
+  };
+}
+
+export function transactionsPage(data: Transaction[], currentPage = 1, lastPage = 1, total = data.length): Paginated<Transaction> {
+  return { data, meta: { current_page: currentPage, last_page: lastPage, per_page: 20, total } };
+}
+
+/** Received through the ingestion API, then refunded: the full `null → paid → refunded` chain. */
+export const INGESTED_TRANSACTION: TransactionDetail = {
+  id: transactionId(42),
+  external_id: 'pos-1042',
+  source: 'ingest',
+  status: 'refunded',
+  total_amount: '259.80',
+  occurred_at: '2026-09-15T14:32:00.000000Z',
+  customer: { id: '5b2e0000-0000-4000-8000-000000000042', name: 'Ana Souza', email: 'ana@example.com', is_deleted: false },
+  items: [
+    {
+      id: '3f4a0000-0000-4000-8000-000000000001',
+      quantity: 2,
+      unit_price: '99.90',
+      line_total: '199.80',
+      product: { id: '2a1b0000-0000-4000-8000-000000000001', name: 'Fone Bluetooth', sku: 'FON-01', is_deleted: false },
+    },
+    {
+      id: '3f4a0000-0000-4000-8000-000000000002',
+      quantity: 1,
+      unit_price: '60.00',
+      line_total: '60.00',
+      product: { id: '2a1b0000-0000-4000-8000-000000000002', name: 'Capa', sku: null, is_deleted: true },
+    },
+  ],
+  status_history: [
+    {
+      from_status: null,
+      to_status: 'paid',
+      occurred_at: '2026-09-15T14:32:00.000000Z',
+      recorded_at: '2026-09-15T14:32:01.000000Z',
+      source: 'ingest',
+    },
+    {
+      from_status: 'paid',
+      to_status: 'refunded',
+      occurred_at: '2026-09-16T12:00:00.000000Z',
+      recorded_at: '2026-09-16T18:30:00.000000Z',
+      source: 'ingest',
+    },
+  ],
 };

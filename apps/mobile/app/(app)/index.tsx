@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { RefreshControl, StyleSheet, View } from 'react-native';
 
 import { KpiCard } from '@/features/dashboard/KpiCard';
-import { PeriodSelector } from '@/features/dashboard/PeriodSelector';
 import { QuickSummary } from '@/features/dashboard/QuickSummary';
 import { RevenueChart } from '@/features/dashboard/RevenueChart';
 import { useDashboard } from '@/features/dashboard/useDashboard';
@@ -13,6 +12,7 @@ import { useActiveOrganization, useSession } from '@/session/SessionProvider';
 import { EmptyState } from '@/ui/EmptyState';
 import { ErrorState } from '@/ui/ErrorState';
 import { LoadingState } from '@/ui/LoadingState';
+import { PeriodSelector } from '@/ui/PeriodSelector';
 import { Screen } from '@/ui/Screen';
 import { Text } from '@/ui/Text';
 import { colors, spacing } from '@/ui/theme';
