@@ -1,4 +1,5 @@
-import { QueryClient } from '@tanstack/react-query';
+import { focusManager, QueryClient } from '@tanstack/react-query';
+import { AppState } from 'react-native';
 
 import { isApiError } from './errors';
 
@@ -25,4 +26,14 @@ export function createQueryClient(): QueryClient {
       },
     },
   });
+}
+
+/**
+ * React Native has no window focus: coming back to the foreground is the moment numbers may be stale.
+ * Returns the unsubscribe function.
+ */
+export function refetchOnAppForeground(): () => void {
+  const subscription = AppState.addEventListener('change', (status) => focusManager.setFocused(status === 'active'));
+
+  return () => subscription.remove();
 }

@@ -96,7 +96,7 @@ export function formatDayMonth(date: CivilDate): string {
 }
 
 /** 2026-09-01 → "01 set 2026". */
-export function formatCivilDate(date: CivilDate): string {
+function formatCivilDate(date: CivilDate): string {
   const { year, month, day } = parts(date);
 
   return `${day} ${MONTHS[Number(month) - 1]} ${year}`;

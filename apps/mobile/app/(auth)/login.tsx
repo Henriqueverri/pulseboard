@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, type TextInput } from 'react-native';
 
 import { errorMessage, isApiError } from '@/api/errors';
@@ -10,6 +10,9 @@ import { Screen } from '@/ui/Screen';
 import { Text } from '@/ui/Text';
 import { TextField } from '@/ui/TextField';
 
+/** After this long the API is probably waking up from a cold start (the token request waits up to 70 s). */
+const SLOW_LOGIN_MS = 5_000;
+
 export default function LoginScreen() {
   const { signIn, notice } = useSession();
   const [email, setEmail] = useState('');
@@ -18,6 +21,20 @@ export default function LoginScreen() {
   const passwordRef = useRef<TextInput>(null);
 
   const login = useMutation({ mutationFn: signIn });
+  // The attempt (by submission time) that has been waiting longer than SLOW_LOGIN_MS.
+  const [slowAttempt, setSlowAttempt] = useState(0);
+  const slow = login.isPending && slowAttempt === login.submittedAt;
+
+  useEffect(() => {
+    if (!login.isPending) {
+      return;
+    }
+
+    const attempt = login.submittedAt;
+    const timer = setTimeout(() => setSlowAttempt(attempt), SLOW_LOGIN_MS);
+
+    return () => clearTimeout(timer);
+  }, [login.isPending, login.submittedAt]);
 
   function submit() {
     if (login.isPending) {
@@ -49,6 +66,9 @@ export default function LoginScreen() {
         {notice && !login.isError ? <Notice message={notice} tone="warning" /> : null}
         {formError ? <Notice message={formError} tone="error" /> : null}
         {missingFields ? <Notice message="Informe e-mail e senha." tone="error" /> : null}
+        {slow ? (
+          <Notice message="O servidor está acordando. O primeiro acesso pode levar até um minuto." tone="info" />
+        ) : null}
 
         <TextField
           label="E-mail"

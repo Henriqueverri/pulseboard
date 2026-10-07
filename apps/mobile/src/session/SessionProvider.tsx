@@ -45,8 +45,8 @@ const SIGNED_OUT: SessionState = {
   restoreError: null,
 };
 
-export const SESSION_EXPIRED_NOTICE = 'Sua sessão expirou. Entre novamente.';
-export const ORGANIZATION_DENIED_NOTICE = 'Você não tem mais acesso a essa organização. Escolha outra.';
+const SESSION_EXPIRED_NOTICE = 'Sua sessão expirou. Entre novamente.';
+const ORGANIZATION_DENIED_NOTICE = 'Você não tem mais acesso a essa organização. Escolha outra.';
 
 /** The preferred organization if still a member; the only one if there is exactly one; otherwise the user picks. */
 function resolveOrganization(organizations: Organization[], preferredId: string | null): Organization | null {

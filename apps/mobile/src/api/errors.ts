@@ -13,7 +13,7 @@ interface ApiErrorInit {
   timedOut?: boolean;
 }
 
-export const ORGANIZATION_ACCESS_DENIED = 'You do not have access to this organization.';
+const ORGANIZATION_ACCESS_DENIED = 'You do not have access to this organization.';
 
 /** Every failed request becomes an `ApiError`, so screens never inspect raw responses. */
 export class ApiError extends Error {
@@ -104,7 +104,7 @@ const KNOWN_MESSAGES: [RegExp, string][] = [
 ];
 
 /** Translates the API messages the app knows about; others are shown as received. */
-export function translateApiMessage(message: string): string {
+function translateApiMessage(message: string): string {
   const known = KNOWN_MESSAGES.find(([pattern]) => pattern.test(message));
 
   return known ? known[1] : message;

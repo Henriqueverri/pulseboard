@@ -3,7 +3,7 @@ import type { CivilRange } from '@/lib/period';
 import { apiRequest } from './client';
 import type { Paginated, Transaction, TransactionDetail, TransactionStatus } from './types';
 
-export const TRANSACTIONS_PER_PAGE = 20;
+const TRANSACTIONS_PER_PAGE = 20;
 
 export interface TransactionFilters {
   status: TransactionStatus | null;

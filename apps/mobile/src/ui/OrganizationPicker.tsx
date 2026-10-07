@@ -7,6 +7,13 @@ import { colors, radius, spacing } from './theme';
 
 const ROLE_LABELS = { owner: 'Proprietário', member: 'Membro' } as const;
 
+/** "Proprietário · BRL · America/Sao_Paulo" */
+export function organizationDetails(organization: Organization): string {
+  return [organization.role ? ROLE_LABELS[organization.role] : null, organization.currency, organization.timezone]
+    .filter(Boolean)
+    .join(' · ');
+}
+
 interface OrganizationPickerProps {
   organizations: Organization[];
   activeId: string | null;
@@ -30,9 +37,7 @@ export function OrganizationPicker({ organizations, activeId, onSelect }: Organi
           >
             <Text variant="label">{organization.name}</Text>
             <Text variant="caption" tone="muted">
-              {[organization.role ? ROLE_LABELS[organization.role] : null, organization.currency, organization.timezone]
-                .filter(Boolean)
-                .join(' · ')}
+              {organizationDetails(organization)}
             </Text>
           </Pressable>
         );

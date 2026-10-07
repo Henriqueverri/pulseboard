@@ -1,4 +1,4 @@
-import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import { http, HttpResponse } from 'msw';
 
 import { demoStore, issuedToken, profile, secondStore } from '../fixtures';
@@ -73,6 +73,32 @@ describe('authentication flow', () => {
     await submitLogin();
 
     expect(await screen.findByText('Muitas tentativas. Tente novamente em 30 segundos.')).toBeOnTheScreen();
+  });
+
+  it('explains a slow login as the server waking up', async () => {
+    let respond: () => void = () => undefined;
+    server.use(
+      http.post(apiUrl('/auth/tokens'), async () => {
+        await new Promise<void>((resolve) => {
+          respond = resolve;
+        });
+        return HttpResponse.json(issuedToken(), { status: 201 });
+      }),
+      http.get(apiUrl('/auth/me'), () => HttpResponse.json(profile())),
+    );
+
+    await openApp();
+    await submitLogin();
+
+    const wakingUp = 'O servidor está acordando. O primeiro acesso pode levar até um minuto.';
+    expect(screen.queryByText(wakingUp)).toBeNull();
+
+    await act(() => jest.advanceTimersByTime(5_000));
+    expect(screen.getByText(wakingUp)).toBeOnTheScreen();
+
+    respond();
+
+    expect(await screen.findByText('Olá, Demo')).toBeOnTheScreen();
   });
 
   it('does not call the API with empty fields', async () => {

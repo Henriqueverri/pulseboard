@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 - **Em produção:** [app.henriqueverri.dev](https://app.henriqueverri.dev) (SPA) e `api.henriqueverri.dev` (API), com deploy contínuo a partir da `main`.
-- **Stack:** Nuxt 4 · Vue 3 · TypeScript · Laravel 12 · PHP 8.4 · PostgreSQL 16.
+- **Stack:** Nuxt 4 · Vue 3 · TypeScript · Laravel 12 · PHP 8.4 · PostgreSQL 16 · app mobile em Expo / React Native.
 - **Documentação técnica:** [integração](docs/integration.md) · [arquitetura](docs/architecture.md) · [API](docs/api.md) · [testes](docs/testing.md) · [deploy](docs/deployment.md).
 
 ![Dashboard do PulseBoard com KPIs comparados ao período anterior, receita diária, distribuição por status e rankings](docs/screenshots/dashboard.png)
@@ -112,6 +112,7 @@ O banco guarda UTC; o calendário de negócio é o fuso IANA da organização (`
 |-------|-----------|-------------|
 | API | PHPUnit — 608 testes | Auth, isolamento entre organizações, CRUD e regras de exclusão, analytics com dados controlados e sobre o dataset de demo, orçamento de consultas, timezone e horário de verão, API Keys, ingestão (validação, idempotência, lifecycle, concorrência real, orçamento de queries, logs), trusted proxies, comandos de release e demo |
 | Web | Vitest + @nuxt/test-utils — 195 testes | Utilitários (dinheiro, datas, períodos, erros), `useApiClient` (CSRF, 419, 401, `Retry-After`, `X-Request-Id`), store de sessão, composables e páginas com fixtures no formato real da API, linha do tempo de status e o segredo da API Key exibido uma única vez |
+| Mobile | Jest (`jest-expo`) + Testing Library + MSW — 78 testes | Client HTTP (Bearer, `X-Organization-Id`, 401/403, `Retry-After`, `X-Request-Id`), SecureStore, datas e períodos no timezone da organização (inclusive horário de verão), e fluxos com Expo Router: login, restauração e expiração da sessão, troca de organização, dashboard e transações (paginação, filtros, detalhe e linha do tempo) |
 | E2E | Playwright + axe | Smoke do fluxo principal e fluxo de integração (criar chave na UI → ingerir → achar pelo ID externo → revogar → 401), contra o build de produção e um PostgreSQL descartável |
 
 Localmente a suíte da API roda em SQLite (10 testes de horário de verão e de concorrência ficam de fora); na CI roda inteira em PostgreSQL. Como rodar: [`docs/testing.md`](docs/testing.md).
@@ -122,6 +123,7 @@ Localmente a suíte da API roda em SQLite (10 testes de horário de verão e de 
 
 - **`api`** — Pint, migrations em PostgreSQL 16 limpo, PHPUnit completo em PostgreSQL;
 - **`web`** — ESLint, typecheck (`vue-tsc`), Vitest e build estático;
+- **`mobile`** — ESLint, typecheck, Jest e bundle Android (Hermes) com `expo export`;
 - **`e2e`** — só depois dos dois anteriores: PostgreSQL + API com dados de demo (senha aleatória por execução, mascarada nos logs) + build estático + Playwright; traces como artefato em caso de falha.
 
 Publicação pelas integrações nativas das plataformas:
@@ -185,6 +187,7 @@ Modelo de dados, alternativas consideradas e limitações conhecidas: [`docs/arc
 | Frontend | Nuxt 4 (SPA), Vue 3, TypeScript, Pinia, Tailwind CSS, reka-ui, Chart.js |
 | Backend | Laravel 12, PHP 8.4, Laravel Sanctum |
 | Banco e infraestrutura | PostgreSQL 16, Supabase, Render (Docker: Nginx + PHP-FPM), Cloudflare Pages, GitHub Actions |
+| Mobile | Expo SDK 57, React Native, Expo Router, TanStack Query, expo-secure-store, react-native-gifted-charts |
 | Testes e qualidade | PHPUnit, Vitest + @nuxt/test-utils, Playwright, Laravel Pint, ESLint, `vue-tsc` |
 
 ## Documentação
@@ -197,7 +200,7 @@ Modelo de dados, alternativas consideradas e limitações conhecidas: [`docs/arc
 | [Testes](docs/testing.md) | Estratégia, o que cada suíte cobre e como rodar localmente e na CI |
 | [Deploy](docs/deployment.md) | Topologia, Render, Supabase, Cloudflare Pages, variáveis de ambiente e operação da demo |
 
-Cada app tem seu README: [`apps/api`](apps/api/README.md) e [`apps/web`](apps/web/README.md).
+Cada app tem seu README: [`apps/api`](apps/api/README.md), [`apps/web`](apps/web/README.md) e [`apps/mobile`](apps/mobile/README.md).
 
 ## Rodando localmente
 
@@ -215,6 +218,17 @@ bun run dev                                            # http://localhost:3000
 ```
 
 Login local: `test@example.com` (owner) ou `member@example.com` (member), senha `password`. O front precisa rodar em `localhost:3000`, a origem liberada no CORS e no Sanctum.
+
+App mobile (npm, Expo Go ou emulador Android), com a API ouvindo na rede:
+
+```bash
+cd apps/api && php artisan serve --host=0.0.0.0 --port=8000
+
+cd apps/mobile && cp .env.example .env && npm install  # ajuste EXPO_PUBLIC_API_URL
+npm start
+```
+
+O app usa Personal Access Tokens do Sanctum (`POST /api/v1/auth/tokens`), não a sessão por cookie da SPA. Detalhes em [`apps/mobile/README.md`](apps/mobile/README.md).
 
 ## Escopo: portfólio, construído como produto
 

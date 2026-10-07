@@ -57,6 +57,36 @@ Personal Access Token do Sanctum (`POST /api/v1/auth/tokens`), sem cookie, sem r
 - Linha: cliente, valor, status, data/hora no timezone da organização e selo "Integração" para transações ingeridas.
 - Detalhe: itens, cliente, identificação e linha do tempo de `status_history` na ordem da API, com horário de registro quando difere do horário do evento. ID inexistente ou de outra organização (404) mostra "Transação não encontrada"; 401 volta ao login; 403 de organização volta à escolha de organização.
 
+## Conta e falhas de rede
+
+- A aba Conta mostra o usuário, a organização atual (papel, moeda e timezone), a troca de organização com confirmação e a versão do app com o host da API em uso.
+- Login lento (> 5 s) avisa que o servidor pode estar acordando: a API de produção roda no plano gratuito do Render e o primeiro acesso pode levar até um minuto.
+- API fora do ar ou sem rede: cada tela mostra o erro com "Tentar novamente" e o `X-Request-Id` quando houver resposta; erros de rede e 5xx são repetidos automaticamente duas vezes. Ao voltar para o app, dados com mais de 30 s são recarregados.
+- Fora do escopo: modo offline, push, refresh token, dark mode.
+
+## Build de preview (APK)
+
+[`eas.json`](eas.json) tem o perfil `preview`: APK de distribuição interna apontando para a API de produção (`https://api.henriqueverri.dev/api/v1`; builds de release Android bloqueiam HTTP sem TLS).
+
+```bash
+npx eas-cli login
+npx eas-cli build --platform android --profile preview
+```
+
+O build roda na nuvem da Expo e exige uma conta Expo: `npx eas-cli init` cria o projeto e informa o `projectId`, que vai em `extra.eas.projectId` no `app.config.ts` (config dinâmica não é editada pelo CLI). O APK funciona com as contas da demo do README raiz.
+
+## Checklist manual no Android
+
+A CI compila o bundle Hermes, mas não executa o app. Antes de publicar um APK, em emulador ou aparelho:
+
+- [ ] Login com a conta da demo; fechar e reabrir o app mantém a sessão.
+- [ ] Dashboard: datas do período e "Hoje" batem com o dia no timezone da organização (`Intl` com `timeZone` no Hermes), inclusive perto da meia-noite.
+- [ ] Trocar o período atualiza KPIs e gráfico; pull-to-refresh funciona.
+- [ ] Transações: rolar até o fim carrega todas as páginas (total igual ao do web); filtros e busca; detalhe com linha do tempo.
+- [ ] Modo avião: erro com "Tentar novamente"; voltar a rede e tentar de novo recupera.
+- [ ] Sair da conta volta ao login e o token deixa de funcionar.
+- [ ] Fonte do sistema em tamanho grande: textos não cortados; TalkBack lê KPIs, linhas e filtros.
+
 ## Estrutura
 
 ```text

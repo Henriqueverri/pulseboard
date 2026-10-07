@@ -130,8 +130,11 @@ describe('dashboard', () => {
     await screen.findByText('R$ 12.500,00');
     await fireEvent.press(screen.getByText('Conta'));
     const option = await screen.findByRole('radio', { name: secondStore.name });
+    // Current organization card and its row in the picker.
+    expect(screen.getAllByText('Proprietário · BRL · America/Sao_Paulo')).toHaveLength(2);
     requests.length = 0;
     await fireEvent.press(option);
+    expect(await screen.findByText('Agora você está vendo os dados de Loja Centro.')).toBeOnTheScreen();
     await fireEvent.press(screen.getByText('Início'));
 
     expect(await screen.findByText(secondStore.name)).toBeOnTheScreen();

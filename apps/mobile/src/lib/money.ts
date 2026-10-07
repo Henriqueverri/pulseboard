@@ -1,5 +1,5 @@
 const LOCALE = 'pt-BR';
-export const EMPTY_VALUE = '—';
+const EMPTY_VALUE = '—';
 
 const formatters = new Map<string, Intl.NumberFormat>();
 
