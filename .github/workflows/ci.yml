@@ -95,6 +95,28 @@ jobs:
       - run: bun run test
       - run: bun run generate
 
+  mobile:
+    name: Mobile (lint, typecheck, Jest, Android bundle)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test -- --ci
+      # Proves the Metro + Hermes bundle compiles; nothing is uploaded.
+      - run: npx expo export --platform android --output-dir /tmp/mobile-export
+
   e2e:
     name: E2E smoke (PostgreSQL → API → static build → Playwright)
     needs: [api, web]
