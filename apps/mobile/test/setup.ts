@@ -1,3 +1,4 @@
+import { defaultHandlers } from './handlers';
 import { server } from './server';
 
 /** In-memory Keychain/Keystore: the native module does not exist under Jest. */
@@ -17,6 +18,8 @@ jest.mock('expo-secure-store', () => {
 });
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+
+beforeEach(() => server.use(...defaultHandlers));
 
 afterEach(() => {
   server.resetHandlers();

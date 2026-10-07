@@ -38,7 +38,7 @@ describe('authentication flow', () => {
     await openApp();
     await submitLogin();
 
-    expect(await screen.findByText('Olá, Demo Owner')).toBeOnTheScreen();
+    expect(await screen.findByText('Olá, Demo')).toBeOnTheScreen();
     expect(body).toMatchObject({ email: 'demo@example.com', password: 'secret-password' });
     expect(body?.device_name).toMatch(/ · [0-9a-f]{4}$/);
     expect(await storedToken()).toBe('12|pbm_newtoken');
@@ -97,7 +97,7 @@ describe('authentication flow', () => {
 
     await openApp();
 
-    expect(await screen.findByText('Olá, Demo Owner')).toBeOnTheScreen();
+    expect(await screen.findByText('Olá, Demo')).toBeOnTheScreen();
     expect(authorization).toBe(`Bearer ${STORED_TOKEN}`);
     expect(organizationHeader).toBe(demoStore.id);
   });
@@ -125,7 +125,7 @@ describe('authentication flow', () => {
     server.use(http.get(apiUrl('/auth/me'), () => HttpResponse.json(profile())));
     await fireEvent.press(screen.getByRole('button', { name: 'Tentar novamente' }));
 
-    expect(await screen.findByText('Olá, Demo Owner')).toBeOnTheScreen();
+    expect(await screen.findByText('Olá, Demo')).toBeOnTheScreen();
   });
 
   it('logs out by revoking the current token', async () => {
@@ -141,7 +141,7 @@ describe('authentication flow', () => {
     );
 
     await openApp();
-    await screen.findByText('Olá, Demo Owner');
+    await screen.findByText('Olá, Demo');
     await fireEvent.press(screen.getByText('Conta'));
     await fireEvent.press(await screen.findByRole('button', { name: 'Sair da conta' }));
 
@@ -161,7 +161,7 @@ describe('authentication flow', () => {
     expect(await screen.findByText('Escolha a organização')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('radio', { name: demoStore.name }));
 
-    expect(await screen.findByText('Olá, Demo Owner')).toBeOnTheScreen();
+    expect(await screen.findByText('Olá, Demo')).toBeOnTheScreen();
     expect(await storedOrganizationId()).toBe(demoStore.id);
   });
 

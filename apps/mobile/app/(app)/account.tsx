@@ -3,10 +3,11 @@ import { StyleSheet, View } from 'react-native';
 
 import { useActiveOrganization, useSession } from '@/session/SessionProvider';
 import { Button } from '@/ui/Button';
+import { Card } from '@/ui/Card';
 import { OrganizationPicker } from '@/ui/OrganizationPicker';
 import { Screen } from '@/ui/Screen';
 import { Text } from '@/ui/Text';
-import { colors, radius, spacing } from '@/ui/theme';
+import { spacing } from '@/ui/theme';
 
 export default function AccountScreen() {
   const { user, organizations, selectOrganization, signOut } = useSession();
@@ -20,15 +21,15 @@ export default function AccountScreen() {
 
   return (
     <Screen scroll edges={['left', 'right']}>
-      <View style={styles.card}>
+      <Card>
         <Text variant="caption" tone="muted">
           Usuário
         </Text>
         <Text variant="heading">{user?.name}</Text>
         <Text tone="muted">{user?.email}</Text>
-      </View>
+      </Card>
 
-      <View style={styles.card}>
+      <Card>
         <Text variant="caption" tone="muted">
           Organização atual
         </Text>
@@ -36,7 +37,7 @@ export default function AccountScreen() {
         <Text tone="muted">
           {organization.currency} · {organization.timezone}
         </Text>
-      </View>
+      </Card>
 
       {organizations.length > 1 ? (
         <View style={styles.section}>
@@ -55,14 +56,6 @@ export default function AccountScreen() {
 }
 
 const styles = StyleSheet.create({
-  card: {
-    gap: spacing.xs,
-    padding: spacing.lg,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
   section: {
     gap: spacing.sm,
   },
