@@ -23,12 +23,15 @@ interface SessionBridge {
   organizationId: string | null;
   /** Called once per 401 on an authenticated request (expired or revoked token). */
   onUnauthorized: (() => void) | null;
+  /** Called when the active organization is rejected (membership removed or invalid id). */
+  onOrganizationDenied: (() => void) | null;
 }
 
 const session: SessionBridge = {
   token: null,
   organizationId: null,
   onUnauthorized: null,
+  onOrganizationDenied: null,
 };
 
 /** The session layer pushes its credentials here; the client never reads storage itself. */
@@ -64,18 +67,19 @@ function parseBody(text: string): unknown {
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', query, body, signal, timeoutMs = REQUEST_TIMEOUT_MS, authenticated = true } = options;
 
+  const { token, organizationId } = session;
   const headers: Record<string, string> = { Accept: 'application/json' };
 
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json';
   }
 
-  if (authenticated && session.token) {
-    headers.Authorization = `Bearer ${session.token}`;
+  if (authenticated && token) {
+    headers.Authorization = `Bearer ${token}`;
   }
 
-  if (authenticated && session.organizationId) {
-    headers['X-Organization-Id'] = session.organizationId;
+  if (authenticated && organizationId) {
+    headers['X-Organization-Id'] = organizationId;
   }
 
   // AbortSignal.any is not available everywhere (Hermes), so the caller's signal is chained by hand.
@@ -118,8 +122,13 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       retryAfter: parseRetryAfter(response.headers.get('Retry-After')),
     });
 
-    if (error.isUnauthorized && authenticated && session.token) {
-      session.onUnauthorized?.();
+    // A late response for credentials that were already replaced must not end the new session.
+    if (authenticated && token && token === session.token) {
+      if (error.isUnauthorized) {
+        session.onUnauthorized?.();
+      } else if (error.isOrganizationContext && organizationId && organizationId === session.organizationId) {
+        session.onOrganizationDenied?.();
+      }
     }
 
     throw error;

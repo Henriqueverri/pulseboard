@@ -20,7 +20,7 @@ async function captureError(promise: Promise<unknown>): Promise<ApiError> {
 }
 
 afterEach(() => {
-  configureApiSession({ token: null, organizationId: null, onUnauthorized: null });
+  configureApiSession({ token: null, organizationId: null, onUnauthorized: null, onOrganizationDenied: null });
 });
 
 describe('apiRequest', () => {
@@ -141,6 +141,41 @@ describe('apiRequest', () => {
     await captureError(apiRequest('/auth/tokens', { method: 'POST', body: {}, authenticated: false }));
 
     expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+
+  it('ignores a late 401 for a token that was already replaced', async () => {
+    const onUnauthorized = jest.fn();
+    configureApiSession({ token: '12|pbm_old', onUnauthorized });
+
+    server.use(
+      http.get(apiUrl('/auth/me'), () => {
+        configureApiSession({ token: '13|pbm_new' });
+        return HttpResponse.json({ message: 'Unauthenticated.' }, { status: 401 });
+      }),
+    );
+
+    await captureError(apiRequest('/auth/me'));
+
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+
+  it('calls onOrganizationDenied when the active organization is rejected', async () => {
+    const onOrganizationDenied = jest.fn();
+    configureApiSession({ token: '12|pbm_secret', organizationId: ORG_ID, onOrganizationDenied });
+
+    server.use(
+      http.get(apiUrl('/dashboard'), () =>
+        HttpResponse.json({ message: 'You do not have access to this organization.' }, { status: 403 }),
+      ),
+      http.delete(apiUrl('/products/1'), () =>
+        HttpResponse.json({ message: 'This action requires the owner role.' }, { status: 403 }),
+      ),
+    );
+
+    await captureError(apiRequest('/dashboard'));
+    await captureError(apiRequest('/products/1', { method: 'DELETE' }));
+
+    expect(onOrganizationDenied).toHaveBeenCalledTimes(1);
   });
 
   it('flags organization context errors (400 without header, 403 without membership)', async () => {

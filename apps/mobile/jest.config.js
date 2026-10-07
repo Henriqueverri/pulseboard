@@ -14,8 +14,9 @@ module.exports = {
   transform: {
     '\\.mjs$': expoPreset.transform['\\.[jt]sx?$'],
   },
+  // Expo's default list, plus ESM-only packages: expo-router's standard-navigation and msw's dependencies.
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|react-native-svg|rettime|until-async|@mswjs/.*|@open-draft/.*)',
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|react-native-svg|standard-navigation|rettime|until-async|@mswjs/.*|@open-draft/.*)',
   ],
   testPathIgnorePatterns: ['/node_modules/', '/.expo/'],
 };
