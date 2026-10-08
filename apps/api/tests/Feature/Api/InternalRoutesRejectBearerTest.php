@@ -4,13 +4,15 @@ namespace Tests\Feature\Api;
 
 use App\Models\Organization;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Feature\Api\Concerns\InteractsWithOrganizationApi;
 use Tests\TestCase;
 
 /**
- * Internal routes are SPA-only (session cookie + CSRF). A bearer token must be
- * a plain 401, never a lookup of Sanctum personal access tokens (there is no such table).
+ * Internal routes accept a session (SPA) or a Sanctum personal access token (native
+ * clients). Any other bearer, including an integration API key (pb_...), is a plain
+ * 401: it is not the id|secret format and matches no stored token hash.
  */
 class InternalRoutesRejectBearerTest extends TestCase
 {
@@ -27,14 +29,38 @@ class InternalRoutesRejectBearerTest extends TestCase
         ];
     }
 
-    #[DataProvider('origins')]
-    public function test_bearer_token_on_an_internal_route_is_a_401(bool $stateful): void
+    /**
+     * @return array<string, array{0: bool, 1: string}>
+     */
+    public static function rejectedBearers(): array
+    {
+        $bearers = [
+            'API key' => 'pb_Ab12Cd34Ef56_not-a-real-secret',
+            'token-looking garbage' => '1|some-sanctum-looking-token',
+            'unknown token id' => '999|pbm_'.str_repeat('a', 48),
+            'non-numeric id' => 'abc|pbm_'.str_repeat('a', 48),
+        ];
+
+        $cases = [];
+
+        foreach (self::origins() as $origin => [$stateful]) {
+            foreach ($bearers as $name => $bearer) {
+                $cases["{$name}, {$origin}"] = [$stateful, $bearer];
+            }
+        }
+
+        return $cases;
+    }
+
+    #[DataProvider('rejectedBearers')]
+    public function test_bearer_that_is_not_an_access_token_is_a_401(bool $stateful, string $bearer): void
     {
         $organization = Organization::factory()->create();
+        $this->memberOf($organization)->createToken('Pixel 8', ['*'], now()->addDay());
 
         $this->withoutOriginUnless($stateful)
             ->withHeaders([
-                'Authorization' => 'Bearer pb_Ab12Cd34Ef56_not-a-real-secret',
+                'Authorization' => "Bearer {$bearer}",
                 'X-Organization-Id' => $organization->id,
             ])
             ->getJson('/api/v1/products')
@@ -45,7 +71,7 @@ class InternalRoutesRejectBearerTest extends TestCase
     }
 
     #[DataProvider('origins')]
-    public function test_bearer_token_on_the_insights_routes_is_a_401(bool $stateful): void
+    public function test_api_key_bearer_on_the_insights_routes_is_a_401(bool $stateful): void
     {
         $organization = Organization::factory()->create();
         $headers = [
@@ -66,7 +92,29 @@ class InternalRoutesRejectBearerTest extends TestCase
             ->assertExactJson(['message' => 'Unauthenticated.']);
     }
 
-    public function test_bearer_token_does_not_replace_or_break_a_valid_session(): void
+    #[DataProvider('origins')]
+    public function test_personal_access_token_authenticates_internal_routes(bool $stateful): void
+    {
+        $organization = Organization::factory()->create();
+        $user = $this->memberOf($organization);
+        $token = $user->createToken('Pixel 8', ['*'], now()->addDay())->plainTextToken;
+
+        $this->withoutOriginUnless($stateful)
+            ->withHeaders([
+                'Authorization' => "Bearer {$token}",
+                'X-Organization-Id' => $organization->id,
+            ])
+            ->getJson('/api/v1/products')
+            ->assertOk();
+
+        Auth::forgetGuards();
+
+        $this->getJson('/api/v1/auth/me')
+            ->assertOk()
+            ->assertJsonPath('user.id', $user->id);
+    }
+
+    public function test_invalid_bearer_does_not_replace_or_break_a_valid_session(): void
     {
         $organization = Organization::factory()->create();
         $owner = $this->memberOf($organization);

@@ -13,13 +13,14 @@ Estratégia de testes e como rodar cada suíte. Visão geral no [README](../READ
 **API** (`tests/Feature`, `tests/Unit`)
 
 - Auth: cadastro, login, logout, `/auth/me` e sessão.
+- Tokens de clientes nativos (`AccessTokenTest`): emissão sem sessão, credenciais inválidas com o mesmo 422 genérico, `device_name` obrigatório, throttle, substituição por dispositivo e coexistência entre dispositivos, limpeza dos expirados, `/auth/me` e `/dashboard` com token, header ausente (400), organização sem membership (403), Policies por papel, expiração em 30 dias, revogação (`DELETE /auth/tokens/current` e logout com token) e token recusado na ingestão.
 - Multi-tenancy: header ausente/inválido, membership, recursos de outra organização (404), `organization_id` no payload ou na query (422), isolamento de listagens e de números agregados.
 - CRUD de produtos e clientes: validação, unicidade por organização (incluindo soft-deleted), exclusão restrita a `owner`, soft delete quando há histórico.
 - Transactions: filtros, busca (inclusive por `external_id` exato, sem atravessar organizações), período no fuso da organização, `source` e `status_history` na ordem do ciclo de vida, somente leitura (405 para escrita).
 - Analytics: cada endpoint com dados controlados, consistência sobre o dataset de demo, consistência cruzada entre endpoints, orçamento fixo de consultas, timezone e horário de verão.
 - API Keys (`ApiKeyManagementTest`, `ApiKeyGeneratorTest`): segredo só na resposta de criação, nunca na listagem; owner cria e revoga, member só lista; opções de expiração; 24 h na demo; limite de 10 ativas; revogação idempotente que para de autenticar na hora; chave de outra organização → 404.
 - Ingestão (`tests/Feature/Api/Ingest`, `TransactionFingerprintTest`, `TransactionStatusTransitionsTest`):
-  - autenticação por chave: ausente, malformada, desconhecida, revogada e expirada recebem o mesmo 401; `last_used_at` com resolução de um minuto; o Bearer não autentica rotas internas (`InternalRoutesRejectBearerTest`);
+  - autenticação por chave: ausente, malformada, desconhecida, revogada e expirada recebem o mesmo 401; `last_used_at` com resolução de um minuto; a API Key (ou qualquer Bearer que não seja um token de acesso válido) não autentica rotas internas, enquanto o token de acesso autentica e uma sessão válida continua valendo com um Bearer inválido junto (`InternalRoutesRejectBearerTest`);
   - validação de cada campo, resolução de produto por SKU e de cliente por `external_id`, moeda e total com `code` estável;
   - idempotência: replay 200, conflito 409, itens em outra ordem, fingerprint;
   - lifecycle: todas as transições permitidas e proibidas, replay por estado, cronologia, histórico em cadeia;
@@ -89,6 +90,18 @@ bun run lint        # bun run lint:fix corrige
 bun run generate    # build estático em .output/public
 ```
 
+## Mobile
+
+```bash
+cd apps/mobile
+npm test            # Jest (jest-expo) + Testing Library + MSW
+npm run typecheck   # gera os tipos das rotas (typed routes) e roda tsc
+npm run lint
+npx expo export --platform android   # bundle Hermes, o mesmo passo da CI
+```
+
+As requisições são interceptadas pelo MSW com fixtures no formato real da API (requisição não prevista falha o teste) e o SecureStore é substituído por um mapa em memória. Os fluxos rodam o Expo Router de verdade (`renderRouter`): login, restauração e expiração da sessão, troca de organização, dashboard e transações. Datas e períodos são testados com `now` injetado em `America/Sao_Paulo`, `UTC`, `America/New_York` (horário de verão) e `Asia/Tokyo`. O comportamento de `Intl` com `timeZone` no Hermes de um aparelho Android é um item do checklist manual em [`apps/mobile/README.md`](../apps/mobile/README.md).
+
 ## E2E (Playwright)
 
 Os testes fazem login com a conta owner da demo (`pulseboard:demo`) e escrevem no banco (o fluxo de integração cria uma chave e uma transação, que não podem ser apagadas; o de insights grava um resumo em cache), então use um banco descartável, recém-criado, nunca o de desenvolvimento nem o de produção. A API sobe com `AI_ENABLED=true AI_PROVIDER=scripted`, para o `pulseboard:demo` ativar os insights da demo e a geração usar o provedor roteirizado. Para rodar de novo o fluxo de insights sem recriar o banco, apague antes o resumo gerado (`delete from ai_insights;`). A senha vem de `DEMO_PASSWORD`, que o `pulseboard:demo` e o Playwright leem do ambiente; use uma senha descartável (a CI gera uma por execução). `E2E_EMAIL` / `E2E_PASSWORD` sobrescrevem a conta, se precisar. Com o front de produção servido em `localhost:3000` (pare o `bun run dev` antes):
@@ -125,6 +138,7 @@ E2E_API_URL=http://localhost:8001/api/v1 bun run test:e2e
 |-----|--------------|
 | `api` | `composer install`, Pint, `migrate` em PostgreSQL 16 limpo, PHPUnit completo em PostgreSQL (sem os skips do SQLite), avaliação de IA com o provedor roteirizado |
 | `web` | `bun install --frozen-lockfile`, lint, typecheck, Vitest, `nuxt generate` |
+| `mobile` | `npm ci`, lint, typecheck, Jest, `expo export --platform android` (bundle Hermes) |
 | `e2e` | PostgreSQL descartável com `migrate:fresh` + `pulseboard:demo` (`DEMO_PASSWORD` aleatória por execução, mascarada nos logs) → API (`artisan serve`, com `AI_ENABLED=true` e `AI_PROVIDER=scripted`) → build estático (`serve:static`) → Playwright (insights, smoke e fluxo de integração, com axe); logs e traces como artefato em caso de falha |
 
 O `e2e` só roda depois que `api` e `web` passam. O deploy da API no Render espera todos os checks.

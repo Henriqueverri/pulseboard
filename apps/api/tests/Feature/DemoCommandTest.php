@@ -288,6 +288,26 @@ class DemoCommandTest extends TestCase
         $this->assertModelExists($otherKey);
     }
 
+    public function test_refresh_removes_the_demo_accounts_tokens_but_a_plain_rerun_keeps_them(): void
+    {
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+        $owner = User::query()->where('email', 'demo@example.com')->sole();
+        $member = User::query()->where('email', 'demo-member@example.com')->sole();
+        $owner->createToken('Pixel 8 · a1b2', ['*'], now()->addDays(30));
+        $member->createToken('Pixel 8 · c3d4', ['*'], now()->addDays(30));
+        $other = $this->memberOf(Organization::factory()->create());
+        $other->createToken('Pixel 8 · e5f6', ['*'], now()->addDays(30));
+
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+        $this->assertSame(1, $owner->tokens()->count());
+        $this->assertSame(1, $member->tokens()->count());
+
+        $this->artisan('pulseboard:demo', ['--refresh' => true])->assertSuccessful();
+        $this->assertSame(0, $owner->tokens()->count());
+        $this->assertSame(0, $member->tokens()->count());
+        $this->assertSame(1, $other->tokens()->count());
+    }
+
     public function test_extended_and_refreshed_sales_keep_source_and_status_history(): void
     {
         $this->artisan('pulseboard:demo')->assertSuccessful();

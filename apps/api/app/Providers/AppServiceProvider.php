@@ -21,7 +21,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
-use Laravel\Sanctum\Sanctum;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -56,10 +55,6 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Customer::class, CustomerPolicy::class);
         Gate::policy(Transaction::class, TransactionPolicy::class);
         Gate::policy(ApiKey::class, ApiKeyPolicy::class);
-
-        // SPA-only authentication: there are no personal access tokens, so a bearer
-        // token on an internal route must never be looked up (it would be a 500).
-        Sanctum::getAccessTokenFromRequestUsing(fn () => null);
 
         // Per key, so one integration cannot exhaust another's budget.
         RateLimiter::for('ingest', function (Request $request): Limit {

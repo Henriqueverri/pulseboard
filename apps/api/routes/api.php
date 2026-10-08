@@ -26,10 +26,14 @@ Route::prefix('v1')->group(function (): void {
             ->middleware('throttle:6,1');
         Route::post('/login', [AuthController::class, 'login'])
             ->middleware('throttle:6,1');
+        // Native clients (mobile): a personal access token instead of a session.
+        Route::post('/tokens', [AuthController::class, 'issueToken'])
+            ->middleware('throttle:6,1');
 
         Route::middleware('auth:sanctum')->group(function (): void {
             Route::post('/logout', [AuthController::class, 'logout']);
             Route::get('/me', [AuthController::class, 'me']);
+            Route::delete('/tokens/current', [AuthController::class, 'revokeCurrentToken']);
         });
     });
 

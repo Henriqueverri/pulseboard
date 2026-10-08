@@ -4,12 +4,12 @@ Contratos da API REST do PulseBoard (`/api/v1`). Visão geral do projeto no [REA
 
 A API tem duas superfícies com autenticações separadas:
 
-- **API interna**, usada pelo front: sessão Sanctum (cookie + CSRF) e `X-Organization-Id`. É o que este documento descreve.
+- **API interna**, usada pelo front web (sessão Sanctum: cookie + CSRF) e por clientes nativos (Personal Access Token do Sanctum via `Authorization: Bearer`), sempre com `X-Organization-Id`. É o que este documento descreve.
 - **API de ingestão** (`/api/v1/ingest/*`), usada por sistemas externos: autenticada só por API Key. Guia completo em [`integration.md`](integration.md); resumo em [Ingestão](#ingestão).
 
 Seções:
 
-- [Autenticação](#autenticação-sanctum-spa)
+- [Autenticação](#autenticação) · [Web (sessão)](#web-sanctum-spa) · [Clientes nativos (token)](#clientes-nativos-personal-access-token)
 - [Products e Customers](#products-e-customers)
 - [Transactions](#transactions)
 - [API Keys](#api-keys)
@@ -19,7 +19,31 @@ Seções:
 
 **Em todas as respostas de `api/*`:** header `X-Request-Id` (o valor recebido, se tiver de 8 a 64 caracteres em `A-Z a-z 0-9 . _ -`, ou um UUID gerado), que também vai em todas as linhas de log da requisição. O CORS expõe `X-Request-Id` e `Retry-After` ao front, que mostra o ID nos estados de erro.
 
-## Autenticação (Sanctum SPA)
+## Autenticação
+
+A API interna aceita duas credenciais, com as mesmas regras de tenant e autorização depois de autenticar:
+
+| Cliente | Credencial | Organização |
+|---------|-----------|-------------|
+| Front web (navegador) | Sessão Sanctum em cookie httpOnly + CSRF | `X-Organization-Id` + membership |
+| Cliente nativo (mobile) | Personal Access Token (PAT) em `Authorization: Bearer`, 30 dias, um por dispositivo | `X-Organization-Id` + membership |
+
+A sessão é verificada primeiro; sem sessão, vale o Bearer. Qualquer Bearer que não seja um PAT válido (inclusive a API Key `pb_…` da ingestão, um token revogado ou expirado) recebe 401 `{"message":"Unauthenticated."}`. O PAT não autentica a ingestão (401 `invalid_api_key`).
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `GET` | `/api/v1/health` | 200 com `{"status":"ok","database":"ok"}`; 503 se o banco não responde |
+| `POST` | `/api/v1/auth/register` | Cria usuário + organização + membership `owner` e inicia a sessão |
+| `POST` | `/api/v1/auth/login` | Inicia a sessão |
+| `POST` | `/api/v1/auth/tokens` | Emite um PAT para um dispositivo, sem sessão |
+| `DELETE` | `/api/v1/auth/tokens/current` | Revoga o PAT da requisição |
+| `POST` | `/api/v1/auth/logout` | Com sessão, invalida a sessão; com PAT, revoga o token |
+| `GET` | `/api/v1/auth/me` | Usuário, organizações e organização atual |
+| `GET` | `/api/v1/organization` | Organização do contexto (nome, moeda, timezone) |
+
+Requisições em `api/*` sempre recebem JSON: 401 sem credencial válida, 404 `{"message":"Resource not found."}` para rota ou recurso inexistente.
+
+### Web (Sanctum SPA)
 
 Fluxo cookie httpOnly + CSRF (sem token no `localStorage`):
 
@@ -28,20 +52,69 @@ Fluxo cookie httpOnly + CSRF (sem token no `localStorage`):
 3. Requests seguintes com cookie de sessão
 4. Contexto de tenant via header `X-Organization-Id` (contexto apenas; autorização = membership)
 
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| `GET` | `/api/v1/health` | 200 com `{"status":"ok","database":"ok"}`; 503 se o banco não responde |
-| `POST` | `/api/v1/auth/register` | Cria usuário + organização + membership `owner` e inicia a sessão |
-| `POST` | `/api/v1/auth/login` | Inicia a sessão |
-| `POST` | `/api/v1/auth/logout` | Invalida a sessão |
-| `GET` | `/api/v1/auth/me` | Usuário, organizações e organização atual |
-| `GET` | `/api/v1/organization` | Organização do contexto (nome, moeda, timezone) |
+Nenhuma resposta do fluxo web expõe token.
 
-Nenhuma resposta expõe token. Requisições em `api/*` sempre recebem JSON: 401 sem sessão, 404 `{"message":"Resource not found."}` para rota ou recurso inexistente.
+### Clientes nativos (Personal Access Token)
+
+Sem cookie, sem CSRF: o app não envia `Origin`/`Referer` de navegador, então a requisição não é tratada como SPA.
+
+**`POST /api/v1/auth/tokens`** — pública, throttle de 6 requisições por minuto (como o login).
+
+| Campo | Regra |
+|-------|-------|
+| `email` | obrigatório, e-mail |
+| `password` | obrigatório |
+| `device_name` | obrigatório, até 100 caracteres. Identifica o dispositivo: um novo token com o mesmo `device_name` substitui o anterior desse usuário (o antigo passa a 401); nomes diferentes coexistem |
+
+- Valida as credenciais sem iniciar sessão. Credenciais inválidas → 422 com a mesma mensagem genérica do login (`errors.email`: `The provided credentials are incorrect.`), sem dizer se o e-mail existe.
+- Ao emitir, os tokens já expirados do usuário são apagados.
+- 201 com `Cache-Control: no-store`. O `token` aparece só nesta resposta (o banco guarda apenas o SHA-256); `user`, `organizations` e `current_organization` têm o mesmo formato de `/auth/me`:
+
+```json
+{
+  "token": "12|pbm_0b6Yk…",
+  "token_type": "Bearer",
+  "expires_at": "2026-11-05T23:43:00.000000Z",
+  "user": { "id": "…", "name": "Demo Owner", "email": "demo@example.com" },
+  "organizations": [{ "id": "…", "name": "PulseBoard Demo Store", "role": "owner", "…": "…" }],
+  "current_organization": { "id": "…", "name": "PulseBoard Demo Store", "role": "owner", "…": "…" }
+}
+```
+
+- Formato `<id>|pbm_<segredo>`: o prefixo `pbm_` permite secret scanning e não se confunde com a API Key `pb_<prefix>_<secret>`.
+- Validade de **30 dias**, sem refresh token: expirado → 401 e um novo `POST /auth/tokens`.
+
+**`DELETE /api/v1/auth/tokens/current`** — revoga o token usado na requisição (204); os outros dispositivos continuam válidos. Numa sessão web não há token a revogar: 400 `{"message":"This request is not authenticated with an access token."}`.
+
+**`POST /api/v1/auth/logout`** com PAT revoga o token atual (200 `{"message":"Logged out."}`), como o `DELETE` acima; com sessão, o comportamento é o do web.
+
+Fluxo completo:
+
+```bash
+API=http://localhost:8000/api/v1
+
+TOKEN=$(curl -s -X POST "$API/auth/tokens" \
+  -H 'Accept: application/json' -H 'Content-Type: application/json' \
+  -d '{"email":"demo@example.com","password":"<senha>","device_name":"Pixel 8 · a1b2"}' | jq -r .token)
+
+ORG=$(curl -s "$API/auth/me" -H 'Accept: application/json' -H "Authorization: Bearer $TOKEN" \
+  | jq -r .current_organization.id)
+
+curl -s "$API/dashboard" -H 'Accept: application/json' \
+  -H "Authorization: Bearer $TOKEN" -H "X-Organization-Id: $ORG"        # 200
+
+curl -s -o /dev/null -w '%{http_code}\n' -X DELETE "$API/auth/tokens/current" \
+  -H 'Accept: application/json' -H "Authorization: Bearer $TOKEN"       # 204
+
+curl -s -o /dev/null -w '%{http_code}\n' "$API/dashboard" -H 'Accept: application/json' \
+  -H "Authorization: Bearer $TOKEN" -H "X-Organization-Id: $ORG"        # 401
+```
+
+O `pulseboard:demo --refresh` apaga os tokens das contas da demo (compartilhadas): os dispositivos fazem login de novo.
 
 ## Products e Customers
 
-Rotas de domínio exigem sessão autenticada + `X-Organization-Id` de uma organização da qual o usuário é membro.
+Rotas de domínio exigem autenticação (sessão ou PAT) + `X-Organization-Id` de uma organização da qual o usuário é membro.
 
 | Recurso | Rotas | Listagem |
 |---------|-------|----------|
@@ -133,7 +206,7 @@ Accept: application/json
 
 ## API Keys
 
-Chaves que autenticam sistemas externos na API de ingestão. Rotas da API interna (sessão + `X-Organization-Id`):
+Chaves que autenticam sistemas externos na API de ingestão. Rotas da API interna (sessão ou PAT + `X-Organization-Id`):
 
 | Método | Rota | Quem | Resposta |
 |--------|------|------|----------|
@@ -206,7 +279,7 @@ Todos são somente leitura (`GET`/`HEAD`; outros métodos → 405) e seguem as m
 - **Venda = transação `paid`:** Dashboard, Revenue, Products e Customers consideram somente transações com status `paid` e `occurred_at` no período. `pending`, `refunded` e `canceled` não são receita, pedido nem atividade de cliente. `average_order_value` é `null` quando não há pedidos.
 - **Exceção — status analytics:** `/analytics/transactions` mostra todos os status. O `revenue` por status é `SUM(total_amount)` daquele status; somente a linha `paid` é receita no sentido do Dashboard.
 - **`meta`:** `period`, `previous_period`, `timezone`, `currency` e os parâmetros específicos do endpoint (`granularity`, `sort`, `limit`).
-- **Tenant isolation:** sessão Sanctum obrigatória (401 sem sessão) e header `X-Organization-Id` de uma organização da qual o usuário é membro (403 sem membership). Owner e member podem consultar. `organization_id` na query → 422. Todas as consultas partem da organização do contexto: dados de outra organização nunca aparecem nem alteram os números.
+- **Tenant isolation:** sessão Sanctum ou PAT obrigatório (401 sem credencial) e header `X-Organization-Id` de uma organização da qual o usuário é membro (403 sem membership). Owner e member podem consultar. `organization_id` na query → 422. Todas as consultas partem da organização do contexto: dados de outra organização nunca aparecem nem alteram os números.
 
 **Consistência entre endpoints** (coberta por testes sobre o seed e com dados controlados):
 
