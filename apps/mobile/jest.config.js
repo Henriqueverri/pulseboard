@@ -19,4 +19,7 @@ module.exports = {
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|react-native-svg|standard-navigation|rettime|until-async|@mswjs/.*|@open-draft/.*)',
   ],
   testPathIgnorePatterns: ['/node_modules/', '/.expo/'],
+  // With a cold transform cache (every CI run), the first flow test of a file also pays for
+  // transforming Expo Router and the whole app, which overruns Jest's 5 s default.
+  testTimeout: 30_000,
 };
