@@ -21,6 +21,24 @@
 | Owner (acesso completo, inclusive exclusão) | `demo@example.com` | `PulseBoardDemo2026!` |
 | Member (sem permissão de exclusão) | `demo-member@example.com` | `PulseBoardDemo2026!` |
 
+### Como avaliar em 5 minutos
+
+O PulseBoard faz parte de um ecossistema em produção: um ponto de venda independente ([PulseBoard POS](https://github.com/Henriqueverri/pulseboard-pos), Java/Spring Boot + React) entrega cada venda à organização demo pela API de ingestão, e o app mobile mostra o resultado.
+
+| Sistema | Stack | Link | Conta | Senha |
+|---|---|---|---|---|
+| **PulseBoard Web** | Nuxt 4, Vue 3, Laravel 12 | [app.henriqueverri.dev](https://app.henriqueverri.dev) | `demo@example.com` | `PulseBoardDemo2026!` |
+| **PulseBoard Mobile** (Android) | Expo, React Native | [APK na última release](https://github.com/Henriqueverri/pulseboard/releases/latest) | `demo@example.com` | `PulseBoardDemo2026!` |
+| **PulseBoard POS** (caixa) | Spring Boot, React | [pos.henriqueverri.dev](https://pos.henriqueverri.dev) | `caixa@pos.example` | `PosCaixa2026!` |
+| **PulseBoard POS** (admin) | Spring Boot, React | [pos.henriqueverri.dev](https://pos.henriqueverri.dev) | `admin@pos.example` | `PosAdmin2026!` |
+
+1. No **POS**, entre como caixa e faça uma venda paga com Pix.
+2. No **PulseBoard Web**, abra **Transações** e busque `pos:`: a venda chegou pela integração, com itens e linha do tempo de status. Em **Integração → API Keys**, a chave `PulseBoard POS` aparece como gerenciada.
+3. No **app**, o dashboard já inclui a venda (puxe para atualizar).
+4. No POS, entre como admin e estorne o pedido: a transação passa a "Estornado" no web e no app.
+
+Tudo roda em planos gratuitos que hibernam sem uso: **abra os links 1 a 2 minutos antes** para acordar os serviços.
+
 O que dá para explorar: dashboard com comparação ao período anterior, as quatro abas de analytics (receita, produtos, clientes e status), CRUD de produtos e clientes, transações com origem e linha do tempo de status, gestão de API Keys, e a diferença de permissões entre owner e member.
 
 - A API roda no plano gratuito do Render: **o primeiro acesso depois de um período ocioso pode levar até ~1 minuto** enquanto o container sobe.

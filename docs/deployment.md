@@ -165,7 +165,7 @@ O `DatabaseSeeder` (`migrate:fresh --seed`) é só para desenvolvimento: usa fac
 **API Keys na demo:** visitantes criam as próprias na conta owner da demo; na organização `pulseboard-demo` toda chave expira em 24 horas, e o limite de 10 ativas, o rate limit de 120 req/min por chave e o `--refresh` contêm abusos. A única chave que o `pulseboard:demo` cria é a **chave gerenciada** de `DEMO_INTEGRATION_KEY` (a do [PulseBoard POS](https://github.com/Henriqueverri/pulseboard-pos), que entrega as vendas na demo):
 
 - não expira e não pode ser revogada pela API (`DELETE` → 403); a tela mostra "Gerenciada";
-- a cada start do container ela é restaurada (mesmo depois de um `--refresh`), e qualquer outra chave gerenciada é revogada: para rotacionar, gere uma chave nova no formato `pb_<12>_<40>` (por exemplo, criando uma numa organização local e copiando o valor), troque o secret no Render e no POS e reinicie;
+- a cada start do container ela é restaurada (mesmo depois de um `--refresh`), e qualquer outra chave gerenciada é revogada: para rotacionar, gere uma chave nova no formato `pb_<12>_<40>` (`echo "pb_$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 12)_$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 40)"`), troque o secret no Render e no POS e reinicie;
 - sem a variável, nenhuma chave é criada e a gerenciada anterior é revogada no próximo start.
 
 ## Insights: custo, cotas e retenção
