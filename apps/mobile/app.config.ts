@@ -8,6 +8,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'PulseBoard',
   slug: 'pulseboard-mobile',
+  owner: 'henriqueverri',
   scheme: 'pulseboard',
   version: '1.0.0',
   orientation: 'portrait',
@@ -34,5 +35,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ],
   experiments: {
     typedRoutes: true,
+  },
+  extra: {
+    ...config.extra,
+    eas: { projectId: '8ece2b27-c184-4d43-aa8d-34cf247da924' },
   },
 });
