@@ -69,7 +69,7 @@ class ApiKeyManagementTest extends TestCase
             ->assertJsonMissingPath('data.0.secret_hash');
 
         $this->assertSame(
-            ['id', 'name', 'prefix', 'status', 'created_by', 'last_used_at', 'expires_at', 'revoked_at', 'created_at'],
+            ['id', 'name', 'prefix', 'status', 'managed', 'created_by', 'last_used_at', 'expires_at', 'revoked_at', 'created_at'],
             array_keys($listing->json('data.0')),
         );
         $this->assertStringNotContainsString($secret, $listing->getContent());
@@ -236,6 +236,27 @@ class ApiKeyManagementTest extends TestCase
             ->getJson('/api/v1/ingest/transactions/order-1')
             ->assertUnauthorized()
             ->assertJsonPath('code', 'invalid_api_key');
+    }
+
+    public function test_a_managed_key_cannot_be_revoked_and_keeps_authenticating(): void
+    {
+        $organization = Organization::factory()->create();
+        $owner = $this->memberOf($organization);
+        [$apiKey, $plainTextKey] = $this->issueApiKey($organization);
+        $apiKey->forceFill(['managed' => true])->save();
+        $this->createIngestedTransaction($organization, 'order-1');
+
+        $this->actingInOrganization($owner, $organization)
+            ->getJson('/api/v1/api-keys')
+            ->assertOk()
+            ->assertJsonPath('data.0.managed', true);
+
+        $this->actingInOrganization($owner, $organization)
+            ->deleteJson("/api/v1/api-keys/{$apiKey->id}")
+            ->assertForbidden();
+
+        $this->assertNull($apiKey->refresh()->revoked_at);
+        $this->asIntegration($plainTextKey)->getJson('/api/v1/ingest/transactions/order-1')->assertOk();
     }
 
     public function test_revoking_twice_keeps_the_original_revocation_time(): void

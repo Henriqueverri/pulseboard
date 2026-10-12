@@ -9,7 +9,8 @@ use App\Policies\Concerns\AuthorizesOrganizationResources;
 use Illuminate\Auth\Access\Response;
 
 /**
- * Members see the organization's keys (never their secrets); only owners issue and revoke them.
+ * Members see the organization's keys (never their secrets); only owners issue and revoke them,
+ * and managed keys (provisioned by `pulseboard:demo`) cannot be revoked by anyone.
  */
 class ApiKeyPolicy
 {
@@ -27,6 +28,12 @@ class ApiKeyPolicy
 
     public function delete(User $user, ApiKey $apiKey): Response
     {
-        return $this->allowOwnedResource($user, $apiKey, Organization::ROLE_OWNER);
+        $response = $this->allowOwnedResource($user, $apiKey, Organization::ROLE_OWNER);
+
+        if ($response->allowed() && $apiKey->managed) {
+            return Response::deny('This key is managed by the demo setup and cannot be revoked.');
+        }
+
+        return $response;
     }
 }

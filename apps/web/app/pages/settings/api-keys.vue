@@ -171,7 +171,7 @@ async function confirmRevoke() {
               {{ dateTime(row.created_at) }}
             </p>
             <p class="truncate text-xs text-ink/65">
-              {{ row.created_by ? `por ${row.created_by.name}` : 'Usuário removido' }}
+              {{ row.managed ? 'Gerenciada pela demo' : row.created_by ? `por ${row.created_by.name}` : 'Usuário removido' }}
             </p>
           </template>
           <template #cell-last_used_at="{ row }">
@@ -184,8 +184,12 @@ async function confirmRevoke() {
             <span class="text-ink/70 tabular">{{ expirationLabel(row) }}</span>
           </template>
           <template #cell-actions="{ row }">
+            <span
+              v-if="row.managed"
+              class="text-xs text-ink/65"
+            >Gerenciada</span>
             <UiButton
-              v-if="row.status === 'active'"
+              v-else-if="row.status === 'active'"
               variant="ghost"
               size="sm"
               class="text-danger-strong"

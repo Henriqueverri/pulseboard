@@ -25,6 +25,7 @@ const active: ApiKey = {
   name: 'ERP produção',
   prefix: 'AbCdEfGh1234',
   status: 'active',
+  managed: false,
   created_by: { id: 'u1', name: 'Owner' },
   last_used_at: '2026-10-01T15:00:00Z',
   expires_at: '2026-12-30T15:00:00Z',
@@ -152,6 +153,21 @@ describe('API keys page as owner', () => {
     expect(JSON.stringify({ ...localStorage })).not.toContain(SECRET)
     expect(JSON.stringify({ ...sessionStorage })).not.toContain(SECRET)
     expect(wrapper.text()).toContain('Nova integração')
+    wrapper.unmount()
+  })
+
+  it('shows a managed key without the revoke action', async () => {
+    const managed: ApiKey = { ...active, id: 'k5', name: 'PulseBoard POS', prefix: 'PoSdEmO12345', managed: true, created_by: null, expires_at: null }
+    repository.list.mockResolvedValue([managed])
+
+    const wrapper = await mountSuspended(ApiKeysPage, { route: '/settings/api-keys', attachTo: document.body })
+    await flushPromises()
+
+    const text = wrapper.text()
+    expect(text).toContain('PulseBoard POS')
+    expect(text).toContain('Gerenciada pela demo')
+    expect(text).not.toContain('Usuário removido')
+    expect(wrapper.findAll('button').map(button => button.text())).not.toContain('Revogar')
     wrapper.unmount()
   })
 

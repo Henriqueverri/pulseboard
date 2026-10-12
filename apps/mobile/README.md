@@ -75,6 +75,13 @@ npx eas-cli build --platform android --profile preview
 
 O build roda na nuvem da Expo e exige uma conta Expo: `npx eas-cli init` cria o projeto e informa o `projectId`, que vai em `extra.eas.projectId` no `app.config.ts` (config dinâmica não é editada pelo CLI). O APK funciona com as contas da demo do README raiz.
 
+Os artefatos do EAS expiram, então o APK publicado fica numa release do GitHub, que é o link do README raiz:
+
+```bash
+gh release create mobile-v1.0.0 pulseboard-1.0.0.apk --title "PulseBoard Mobile 1.0.0" \
+  --notes "APK Android apontando para a API de produção. Contas da demo no README."
+```
+
 ## Checklist manual no Android
 
 A CI compila o bundle Hermes, mas não executa o app. Antes de publicar um APK, em emulador ou aparelho:

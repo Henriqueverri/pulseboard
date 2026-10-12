@@ -15,7 +15,9 @@ export interface ApiKey {
   /** Public part of the key (`pb_<prefix>_<secret>`), safe to display. */
   prefix: string
   status: ApiKeyStatus
-  /** `null` when the user who created the key no longer exists. */
+  /** Provisioned by the demo setup (the POS integration): never expires and cannot be revoked. */
+  managed: boolean
+  /** `null` when the user who created the key no longer exists, and for managed keys. */
   created_by: { id: string, name: string } | null
   last_used_at: IsoDateTime | null
   expires_at: IsoDateTime | null

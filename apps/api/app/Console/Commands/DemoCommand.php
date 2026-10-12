@@ -8,6 +8,7 @@ use App\Models\Organization;
 use App\Models\Product;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Support\ApiKeyGenerator;
 use Database\Seeders\DemoDataSeeder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -22,7 +23,10 @@ use Laravel\Sanctum\PersonalAccessToken;
  * today (only days after the latest sale are added). --refresh rebuilds the demo
  * organization's catalog and ~6-month history so it ends today again, and removes
  * the API keys visitors created and the demo accounts' access tokens. The command
- * itself never creates API keys or access tokens.
+ * never creates access tokens, and the only API key it creates is the managed
+ * integration key configured in DEMO_INTEGRATION_KEY: on every run it is restored
+ * (not expiring, not revoked) and any other managed key is revoked, so rotating or
+ * unsetting the variable takes effect on the next start.
  *
  * While AI_ENABLED is on, the demo organization (and only it) is opted into
  * Insights on behalf of the demo owner, so a visitor who turned it off finds it on
@@ -42,7 +46,7 @@ class DemoCommand extends Command
 
     protected $description = 'Create or refresh the public demo organization and its owner/member accounts';
 
-    public function handle(): int
+    public function handle(ApiKeyGenerator $generator): int
     {
         $password = config('demo.password');
 
@@ -58,15 +62,28 @@ class DemoCommand extends Command
             Organization::ROLE_MEMBER => ['email' => config('demo.member_email'), 'name' => 'Demo Member'],
         ];
 
-        if ($problem = $this->conflict($organization, $accounts)) {
+        $integrationKey = null;
+
+        if (filled(config('demo.integration_key'))) {
+            $integrationKey = $generator->parse((string) config('demo.integration_key'));
+
+            if ($integrationKey === null) {
+                $this->error('DEMO_INTEGRATION_KEY must be a full API key in the format pb_<prefix>_<secret>.');
+
+                return self::FAILURE;
+            }
+        }
+
+        if ($problem = $this->conflict($organization, $accounts) ?? $this->integrationKeyConflict($organization, $integrationKey)) {
             $this->error($problem);
 
             return self::FAILURE;
         }
 
         if ($organization !== null && ! $this->option('refresh')) {
-            [$filled, $added] = DB::transaction(function () use ($organization, $accounts, $password): array {
+            [$filled, $added] = DB::transaction(function () use ($organization, $accounts, $password, $integrationKey): array {
                 $this->syncAccounts($organization, $accounts, $password);
+                $this->syncIntegrationKey($organization, $integrationKey);
                 $this->optIntoInsights($organization, $accounts[Organization::ROLE_OWNER]['email']);
                 $seeder = new DemoDataSeeder;
 
@@ -84,7 +101,7 @@ class DemoCommand extends Command
             return self::SUCCESS;
         }
 
-        DB::transaction(function () use (&$organization, $accounts, $password): void {
+        DB::transaction(function () use (&$organization, $accounts, $password, $integrationKey): void {
             if ($organization === null) {
                 $organization = Organization::query()->create([
                     'name' => self::ORGANIZATION_NAME,
@@ -96,6 +113,7 @@ class DemoCommand extends Command
             }
 
             $this->syncAccounts($organization, $accounts, $password);
+            $this->syncIntegrationKey($organization, $integrationKey);
             $this->optIntoInsights($organization, $accounts[Organization::ROLE_OWNER]['email']);
 
             (new DemoDataSeeder)->setContainer($this->laravel)->__invoke(['organization' => $organization]);
@@ -156,6 +174,55 @@ class DemoCommand extends Command
 
             $organization->users()->syncWithoutDetaching([$user->id => ['role' => $role]]);
         }
+    }
+
+    /**
+     * A prefix is unique across organizations: the configured key must not be someone else's.
+     *
+     * @param  array{prefix: string, secret: string}|null  $key
+     */
+    private function integrationKeyConflict(?Organization $organization, ?array $key): ?string
+    {
+        if ($key === null) {
+            return null;
+        }
+
+        $taken = ApiKey::query()
+            ->where('prefix', $key['prefix'])
+            ->when($organization, fn ($query) => $query->where('organization_id', '!=', $organization->id))
+            ->exists();
+
+        return $taken ? 'The prefix of DEMO_INTEGRATION_KEY belongs to an API key outside the demo organization.' : null;
+    }
+
+    /**
+     * @param  array{prefix: string, secret: string}|null  $key
+     */
+    private function syncIntegrationKey(Organization $organization, ?array $key): void
+    {
+        ApiKey::query()
+            ->forOrganization($organization)
+            ->where('managed', true)
+            ->whereNull('revoked_at')
+            ->when($key, fn ($query) => $query->where('prefix', '!=', $key['prefix']))
+            ->update(['revoked_at' => now()]);
+
+        if ($key === null) {
+            return;
+        }
+
+        $apiKey = ApiKey::query()->forOrganization($organization)->where('prefix', $key['prefix'])->first()
+            ?? new ApiKey;
+
+        $apiKey->forceFill([
+            'organization_id' => $organization->id,
+            'name' => config('demo.integration_key_name'),
+            'prefix' => $key['prefix'],
+            'secret_hash' => ApiKeyGenerator::hash($key['secret']),
+            'managed' => true,
+            'expires_at' => null,
+            'revoked_at' => null,
+        ])->save();
     }
 
     private function optIntoInsights(Organization $organization, string $ownerEmail): void
