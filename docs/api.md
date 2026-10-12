@@ -220,6 +220,7 @@ Chaves que autenticam sistemas externos na API de ingestão. Rotas da API intern
 - `expires_in_days`: `30`, `90`, `365` ou `null`/ausente (sem expiração); outro valor → 422.
 - `organization_id`, `prefix` e `secret_hash` no payload → 422: a organização vem do contexto e a chave é gerada no servidor.
 - **Organização de demo** (slug `pulseboard-demo`): toda chave expira em 24 horas, qualquer que seja o `expires_in_days`.
+- **Chaves gerenciadas** (`managed: true`): criadas pelo `pulseboard:demo` a partir de `DEMO_INTEGRATION_KEY`, não expiram e não podem ser revogadas (`DELETE` → 403).
 - **Limite:** 10 chaves ativas por organização; a 11ª → 422 com `errors.api_keys`. A contagem é serializada por lock na organização, então criações simultâneas não passam do limite.
 
 ```json

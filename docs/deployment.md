@@ -71,7 +71,7 @@ postgresql://postgres.<project-ref>:<senha-url-encoded>@aws-0-<região>.pooler.s
 
 ## Variáveis de ambiente
 
-Nenhum valor real vai para o Git. No `render.yaml`, os secrets (`APP_KEY`, `DB_URL`, `DEMO_PASSWORD`, `OPENAI_API_KEY`) usam `sync: false`: o Render pede os valores ao criar o Blueprint.
+Nenhum valor real vai para o Git. No `render.yaml`, os secrets (`APP_KEY`, `DB_URL`, `DEMO_PASSWORD`, `DEMO_INTEGRATION_KEY`, `OPENAI_API_KEY`) usam `sync: false`: o Render pede os valores ao criar o Blueprint.
 
 | Variável | Valor |
 |----------|-------|
@@ -97,6 +97,7 @@ Nenhum valor real vai para o Git. No `render.yaml`, os secrets (`APP_KEY`, `DB_U
 | `LOG_STDERR_FORMATTER` | `Monolog\Formatter\JsonFormatter` (um objeto JSON por linha, ver [Logs](#logs)) |
 | `DEMO_PASSWORD` | secret — senha das contas de demonstração (mínimo 12 caracteres) |
 | `DEMO_OWNER_EMAIL` / `DEMO_MEMBER_EMAIL` | `demo@example.com` / `demo-member@example.com` (padrão) |
+| `DEMO_INTEGRATION_KEY` | secret, opcional — chave gerenciada do POS na demo (ver [Demo](#dados-de-demonstração)) |
 | `AI_ENABLED` | `false` — kill switch global dos Insights (ver [Insights](#insights-custo-cotas-e-retenção)) |
 | `AI_PROVIDER` / `AI_MODEL` | `openai` / `gpt-6-luna` |
 | `OPENAI_API_KEY` | secret — só no painel do Render, nunca no Git nem no front |
@@ -161,7 +162,11 @@ DB_URL='<SUPABASE_SESSION_POOLER_URL>' DB_SSLMODE=require DEMO_PASSWORD='<senha 
 
 O `DatabaseSeeder` (`migrate:fresh --seed`) é só para desenvolvimento: usa factories e cria `test@example.com` / `password`.
 
-**API Keys na demo:** nenhuma chave é criada pelo `pulseboard:demo`, pelo seed ou pelo entrypoint. Visitantes criam as próprias na conta owner da demo; na organização `pulseboard-demo` toda chave expira em 24 horas, e o limite de 10 ativas, o rate limit de 120 req/min por chave e o `--refresh` contêm abusos.
+**API Keys na demo:** visitantes criam as próprias na conta owner da demo; na organização `pulseboard-demo` toda chave expira em 24 horas, e o limite de 10 ativas, o rate limit de 120 req/min por chave e o `--refresh` contêm abusos. A única chave que o `pulseboard:demo` cria é a **chave gerenciada** de `DEMO_INTEGRATION_KEY` (a do [PulseBoard POS](https://github.com/Henriqueverri/pulseboard-pos), que entrega as vendas na demo):
+
+- não expira e não pode ser revogada pela API (`DELETE` → 403); a tela mostra "Gerenciada";
+- a cada start do container ela é restaurada (mesmo depois de um `--refresh`), e qualquer outra chave gerenciada é revogada: para rotacionar, gere uma chave nova no formato `pb_<12>_<40>` (por exemplo, criando uma numa organização local e copiando o valor), troque o secret no Render e no POS e reinicie;
+- sem a variável, nenhuma chave é criada e a gerenciada anterior é revogada no próximo start.
 
 ## Insights: custo, cotas e retenção
 

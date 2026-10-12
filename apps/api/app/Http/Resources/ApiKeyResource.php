@@ -33,6 +33,7 @@ class ApiKeyResource extends JsonResource
             'name' => $this->name,
             'prefix' => $this->prefix,
             'status' => $this->status(),
+            'managed' => (bool) $this->managed,
             'created_by' => $this->whenLoaded('createdBy', fn () => $this->createdBy === null ? null : [
                 'id' => $this->createdBy->id,
                 'name' => $this->createdBy->name,

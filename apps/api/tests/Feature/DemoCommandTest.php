@@ -23,6 +23,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\Feature\Ai\Concerns\InteractsWithInsights;
+use Tests\Feature\Api\Concerns\InteractsWithIngestApi;
 use Tests\Feature\Api\Concerns\InteractsWithOrganizationApi;
 use Tests\Feature\Domain\Concerns\AssertsStatusHistory;
 use Tests\TestCase;
@@ -30,6 +31,7 @@ use Tests\TestCase;
 class DemoCommandTest extends TestCase
 {
     use AssertsStatusHistory;
+    use InteractsWithIngestApi;
     use InteractsWithInsights;
     use InteractsWithOrganizationApi;
     use RefreshDatabase;
@@ -286,6 +288,65 @@ class DemoCommandTest extends TestCase
         $this->artisan('pulseboard:demo', ['--refresh' => true])->assertSuccessful();
         $this->assertModelMissing($visitorKey);
         $this->assertModelExists($otherKey);
+    }
+
+    public function test_provisions_the_configured_integration_key_as_a_managed_key_of_the_demo(): void
+    {
+        $key = 'pb_'.str_repeat('a', 12).'_'.str_repeat('b', 40);
+        config(['demo.integration_key' => $key]);
+
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+
+        $apiKey = ApiKey::query()->sole();
+        $this->assertSame(Organization::query()->sole()->id, $apiKey->organization_id);
+        $this->assertSame('PulseBoard POS', $apiKey->name);
+        $this->assertSame(str_repeat('a', 12), $apiKey->prefix);
+        $this->assertSame(hash('sha256', str_repeat('b', 40)), $apiKey->secret_hash);
+        $this->assertTrue($apiKey->managed);
+        $this->assertNull($apiKey->expires_at);
+        $this->assertNull($apiKey->created_by_user_id);
+
+        $this->asIntegration($key)->getJson('/api/v1/ingest/transactions/missing')->assertNotFound();
+    }
+
+    public function test_every_run_restores_the_managed_key_and_refresh_keeps_it(): void
+    {
+        config(['demo.integration_key' => 'pb_'.str_repeat('a', 12).'_'.str_repeat('b', 40)]);
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+        ApiKey::query()->sole()->forceFill(['revoked_at' => now(), 'expires_at' => now()->subMinute()])->save();
+
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+        $this->assertSame(ApiKey::STATUS_ACTIVE, ApiKey::query()->sole()->status());
+
+        $this->artisan('pulseboard:demo', ['--refresh' => true])->assertSuccessful();
+        $this->assertSame(ApiKey::STATUS_ACTIVE, ApiKey::query()->sole()->status());
+    }
+
+    public function test_rotating_or_unsetting_the_integration_key_revokes_the_previous_one(): void
+    {
+        config(['demo.integration_key' => 'pb_'.str_repeat('a', 12).'_'.str_repeat('b', 40)]);
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+
+        config(['demo.integration_key' => 'pb_'.str_repeat('c', 12).'_'.str_repeat('d', 40)]);
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+        $this->assertSame(ApiKey::STATUS_REVOKED, ApiKey::query()->where('prefix', str_repeat('a', 12))->sole()->status());
+        $this->assertSame(ApiKey::STATUS_ACTIVE, ApiKey::query()->where('prefix', str_repeat('c', 12))->sole()->status());
+
+        config(['demo.integration_key' => null]);
+        $this->artisan('pulseboard:demo')->assertSuccessful();
+        $this->assertSame(0, ApiKey::query()->active()->count());
+    }
+
+    public function test_refuses_a_malformed_integration_key_or_one_taken_by_another_organization(): void
+    {
+        config(['demo.integration_key' => 'not-a-key']);
+        $this->artisan('pulseboard:demo')->assertFailed();
+        $this->assertSame(0, Organization::query()->count());
+
+        $foreign = ApiKey::factory()->for(Organization::factory())->create();
+        config(['demo.integration_key' => "pb_{$foreign->prefix}_".str_repeat('b', 40)]);
+        $this->artisan('pulseboard:demo')->assertFailed();
+        $this->assertSame(1, ApiKey::query()->count());
     }
 
     public function test_refresh_removes_the_demo_accounts_tokens_but_a_plain_rerun_keeps_them(): void
