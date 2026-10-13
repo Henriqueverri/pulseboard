@@ -57,6 +57,9 @@ services:
         sync: false
       - key: DB_SSLMODE
         value: require
+      # One connection per PHP-FPM worker (pm.max_children = 5), reused across requests.
+      - key: DB_PERSISTENT
+        value: "true"
       - key: TRUSTED_PROXIES
         value: "*"
       - key: LOG_CHANNEL
