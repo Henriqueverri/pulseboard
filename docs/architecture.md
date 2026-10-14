@@ -263,6 +263,16 @@ ingestão ──commit──► resposta HTTP ──defer()──► evento ─�
 - **Rajadas viram um refetch:** uma venda no POS gera a transação e uma baixa de estoque por item. Os clientes esperam 1 s sem eventos e recarregam uma vez: no web, `refreshNuxtData` só nas chaves da organização (dashboard, transações, analytics, produtos, clientes; Insights, que custam uma chamada de IA, ficam de fora); no app, `invalidateQueries(['org', id])`.
 - **Reconexão:** ao voltar de uma queda de conexão, os clientes recarregam uma vez, porque os eventos daquele intervalo se perderam. No app o socket só fica aberto em primeiro plano; ao voltar, reconecta, e o React Query já refaz as consultas no foco.
 
+### Notificações push
+
+Com o app fechado, os mesmos eventos viram avisos no celular: estoque baixo ou zerado e meta diária de receita batida. Contrato em [`api.md`](api.md#notificações-push).
+
+- **Um listener sobre os eventos de domínio** (`SendPushNotifications`), no mesmo `defer()`: nenhuma consulta nova no caminho da ingestão. Os eventos implementam `ShouldRescue`, porque o Laravel transmite o broadcast *antes* de chamar os listeners: sem isso, um Reverb fora do ar impediria o push.
+- **Expo Push Service** em vez de FCM/APNs direto: o mesmo token serve para Android e iOS, e as credenciais do Firebase ficam no EAS, não na API. O `ExpoPushClient` envia em lotes de 100, repete erros de conexão, 5xx e 429, e apaga os tokens `DeviceNotRegistered`. Nos testes, `PUSH_DRIVER=fake`.
+- **Dedupe antes do envio:** o `INSERT` em `notification_events` com unicidade por dia local é o lock. Simples e seguro sob concorrência, ao custo de at-most-once.
+- **Meta diária pelo mesmo cálculo do dashboard** (`DashboardService::kpis` de "hoje" no timezone da organização), conferida só quando uma venda paga entra ou uma transação vira paga, e só enquanto o aviso do dia não saiu.
+- **Dispositivo preso ao PAT:** a FK `personal_access_token_id` com `cascadeOnDelete` faz logout, expiração e novo login removerem o dispositivo sem código extra.
+
 ## Timezone
 
 "Hoje", "este mês" e "semana passada" dependem de onde o negócio está, não de onde o servidor roda.
@@ -307,6 +317,8 @@ Detalhes operacionais em [`deployment.md`](deployment.md).
 - Um único ambiente (produção), sem staging.
 - Tempo real numa única instância do Reverb, com estado em memória: escalar a API horizontalmente exigiria o scaling via Redis do Reverb. Eventos enviados enquanto um cliente está desconectado não são reentregues; o cliente compensa recarregando ao reconectar.
 - O Render Free hiberna sem requisições HTTP; uma tela aberta só com o WebSocket pode não manter o serviço acordado.
+- Push sem consulta de receipts do Expo (não há worker nem cron): uma entrega recusada pelo FCM/APNs depois de aceita pelo Expo não é detectada, e um token inválido só sai quando o Expo o recusa no envio. O dedupe at-most-once perde o aviso do dia se o Expo estiver fora do ar.
+- `notification_events` não tem retenção: cresce no máximo alguns registros por produto e organização por dia.
 
 Trade-offs aceitos na ingestão:
 

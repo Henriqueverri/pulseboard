@@ -100,7 +100,7 @@ npm run lint
 npx expo export --platform android   # bundle Hermes, o mesmo passo da CI
 ```
 
-As requisições são interceptadas pelo MSW com fixtures no formato real da API (requisição não prevista falha o teste) e o SecureStore é substituído por um mapa em memória. Os fluxos rodam o Expo Router de verdade (`renderRouter`): login, restauração e expiração da sessão, troca de organização, dashboard e transações. Datas e períodos são testados com `now` injetado em `America/Sao_Paulo`, `UTC`, `America/New_York` (horário de verão) e `Asia/Tokyo`. O comportamento de `Intl` com `timeZone` no Hermes de um aparelho Android é um item do checklist manual em [`apps/mobile/README.md`](../apps/mobile/README.md).
+As requisições são interceptadas pelo MSW com fixtures no formato real da API (requisição não prevista falha o teste) e o SecureStore é substituído por um mapa em memória. Os fluxos rodam o Expo Router de verdade (`renderRouter`): login, restauração e expiração da sessão, troca de organização, dashboard, transações e notificações push (registro do token, liga/desliga na Conta, permissão bloqueada e o toque no aviso abrindo a tela na organização certa). O `expo-notifications` é substituído por um mock com permissão concedida e token fixo; o recebimento real fica no checklist manual. Datas e períodos são testados com `now` injetado em `America/Sao_Paulo`, `UTC`, `America/New_York` (horário de verão) e `Asia/Tokyo`. O comportamento de `Intl` com `timeZone` no Hermes de um aparelho Android é um item do checklist manual em [`apps/mobile/README.md`](../apps/mobile/README.md).
 
 ## E2E (Playwright)
 
