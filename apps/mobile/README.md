@@ -79,7 +79,7 @@ Avisos de estoque baixo ou zerado e de meta diária batida (regras em [`docs/api
 O push no Android passa pelo Firebase Cloud Messaging; as credenciais não ficam no repositório nem na API:
 
 1. Crie um projeto no [Firebase Console](https://console.firebase.google.com) e adicione um app Android com o pacote `dev.henriqueverri.pulseboard`.
-2. Baixe o `google-services.json` e salve em `apps/mobile/google-services.json`. Pode ser commitado (só identificadores públicos); o `app.config.ts` o usa quando existe, e sem ele o APK não obtém push token.
+2. Baixe o `google-services.json` e envie ao EAS como variável de arquivo, lida pelo `app.config.ts` (sem ela o APK não obtém push token): `npx eas-cli env:create --name GOOGLE_SERVICES_JSON --type file --value ./google-services.json --environment preview --environment production --visibility sensitive`.
 3. Em *Configurações do projeto → Contas de serviço*, gere uma chave privada (JSON). **Não commite este arquivo.**
 4. Envie a chave ao EAS: `npx eas-cli credentials` → Android → `preview` (e `production`) → *Google Service Account* → *Manage your Google Service Account Key for Push Notifications (FCM V1)* → *Upload a new service account key*.
 5. Gere um novo APK (`npx eas-cli build --platform android --profile preview`): o APK anterior não tem `expo-notifications`.

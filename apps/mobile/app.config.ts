@@ -1,11 +1,8 @@
-import { existsSync } from 'node:fs';
-
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
 /** Same values as `colors.primary` / `colors.background` in `src/ui/theme.ts`. */
 const BRAND = '#4F46E5';
 const BACKGROUND = '#F6F7FB';
-const GOOGLE_SERVICES_FILE = './google-services.json';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -30,8 +27,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       monochromeImage: './assets/android-icon-monochrome.png',
     },
     predictiveBackGestureEnabled: false,
-    // Downloaded from Firebase (public identifiers): without it the APK gets no push token.
-    ...(existsSync(GOOGLE_SERVICES_FILE) ? { googleServicesFile: GOOGLE_SERVICES_FILE } : {}),
+    // EAS file variable with the Firebase google-services.json: without it the APK gets no push token.
+    googleServicesFile: process.env.GOOGLE_SERVICES_JSON,
   },
   plugins: [
     'expo-router',
