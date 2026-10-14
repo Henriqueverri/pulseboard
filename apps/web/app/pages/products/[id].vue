@@ -119,7 +119,10 @@ async function onDeleted() {
         </template>
       </PageHeader>
 
-      <div class="grid gap-4 sm:grid-cols-2">
+      <div
+        class="grid gap-4"
+        :class="product.stock ? 'sm:grid-cols-3' : 'sm:grid-cols-2'"
+      >
         <StatCard
           label="Receita total"
           :value="formatMoney(product.revenue, currency)"
@@ -128,6 +131,29 @@ async function onDeleted() {
           label="Unidades vendidas"
           :value="formatInteger(product.units_sold)"
         />
+        <div
+          v-if="product.stock"
+          class="rounded-2xl border border-ink/[0.06] bg-surface p-5"
+          data-testid="product-stock"
+        >
+          <div class="flex items-center justify-between gap-2">
+            <p class="text-sm text-ink/65">
+              Estoque
+            </p>
+            <StockStatusTag
+              :status="product.stock.status"
+              size="sm"
+            />
+          </div>
+          <p class="mt-2 text-2xl font-semibold tracking-tight text-ink tabular">
+            {{ formatUnits(product.stock.quantity) }}
+          </p>
+          <p class="mt-1 text-xs text-ink/65">
+            Mínimo {{ formatUnits(product.stock.min_quantity) }}<template v-if="product.stock.updated_at">
+              · informado pela integração em {{ formatDateTime(product.stock.updated_at, timezone, { time: true }) }}
+            </template>
+          </p>
+        </div>
       </div>
       <p class="mt-2 text-xs text-ink/65">
         Totais de todo o histórico, considerando somente transações pagas.

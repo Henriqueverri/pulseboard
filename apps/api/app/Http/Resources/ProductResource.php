@@ -38,6 +38,13 @@ class ProductResource extends JsonResource
             'price' => $this->price,
             'status' => $this->status->value,
             'external_id' => $this->external_id,
+            // Owned by the integrating system: read-only here, null without stock control.
+            'stock' => $this->stock_tracked ? [
+                'quantity' => $this->stock_quantity,
+                'min_quantity' => $this->stock_min,
+                'status' => $this->stockStatus()?->value,
+                'updated_at' => $this->stock_updated_at,
+            ] : null,
             $this->mergeWhen($this->metrics !== null, fn () => $this->metrics),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,

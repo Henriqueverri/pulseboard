@@ -128,6 +128,7 @@ Rotas de domínio exigem autenticação (sessão ou PAT) + `X-Organization-Id` d
 - `DELETE` é restrito a `owner`. Sem histórico (nenhuma venda/transação) o registro é removido; com histórico é feito soft delete e as transações permanecem intactas.
 - SKU e e-mail são únicos por organização **incluindo registros soft-deleted** (o índice único não é parcial). E-mails são normalizados para minúsculas.
 - **`external_id`** (opcional, `null` por padrão): o ID do registro no sistema integrado, com até 128 caracteres em `A-Z a-z 0-9 . _ : -`, único por organização incluindo soft-deleted. Aceito no `POST`/`PATCH` e devolvido nas respostas. Na ingestão, o cliente é reconhecido por ele; o produto é reconhecido pelo SKU.
+- **`stock`** (somente leitura): `null` para produto sem controle de estoque; senão `{ quantity, min_quantity, status, updated_at }`, com `status` `ok`, `low` (saldo igual ou abaixo do mínimo) ou `out` (zerado). Só a [ingestão de estoque](integration.md#8-estoque) altera o saldo; campos de estoque no `POST`/`PATCH` são ignorados.
 
 ## Transactions
 
@@ -255,6 +256,7 @@ Rotas autenticadas **só** por `Authorization: Bearer pb_<prefix>_<secret>`: sem
 | `POST` | `/api/v1/ingest/transactions` | 201 criada (`Location`), 200 reenvio idêntico (`Idempotent-Replayed: true`), 409, 422 |
 | `GET` | `/api/v1/ingest/transactions/{external_id}` | 200 ou 404 `not_found` |
 | `POST` | `/api/v1/ingest/transactions/{external_id}/status-changes` | 201 aplicada, 200 já no status, 404, 409 `invalid_transition`, 422 |
+| `PUT` | `/api/v1/ingest/products/{sku}/stock` | 200 aplicado, 200 igual ou mais antigo que o gravado (`Idempotent-Replayed: true`), 422 |
 
 Erros sempre com `message` e `code` estável (`invalid_api_key`, `validation_failed`, `currency_mismatch`, `total_mismatch`, `transaction_conflict`, `customer_email_conflict`, `invalid_transition`, `not_found`, `rate_limited`); 422 com `errors` por campo. As rotas internas recusam o Bearer da integração (401): as duas credenciais não se misturam.
 
@@ -269,6 +271,7 @@ Payload, regras de validação, idempotência, retry, reconciliação, lifecycle
 | `GET /api/v1/analytics/products` | Ranking de produtos + resumo | `sort`, `limit` | 3 |
 | `GET /api/v1/analytics/customers` | Ranking de clientes + indicadores da base | `sort`, `limit` | 4 |
 | `GET /api/v1/analytics/transactions` | Distribuição por status | — | 1 |
+| `GET /api/v1/analytics/inventory` | Estoque atual com dias de cobertura | não aceita período ([detalhes](#inventory-analytics)) | 1 |
 
 Todos são somente leitura (`GET`/`HEAD`; outros métodos → 405) e seguem as mesmas regras:
 
@@ -570,3 +573,73 @@ Accept: application/json
 ```
 
 Uma única consulta agregada por request (agrupada por status, período anterior via `CASE`), sem acessar itens nem clientes.
+
+## Inventory analytics
+
+`GET /api/v1/analytics/inventory` devolve o estoque atual dos produtos com controle de estoque, informado pela [integração](integration.md#8-estoque). É uma foto do momento, não um período: `from` / `to` não se aplicam e não há comparação com período anterior. Autenticação, tenant isolation e permissões seguem as regras comuns.
+
+| Campo do item | Definição |
+|---------------|-----------|
+| `quantity`, `min_quantity` | Último saldo e mínimo informados |
+| `status` | `out` com saldo zero, `low` com saldo igual ou abaixo do mínimo, `ok` acima dele |
+| `units_sold` | Unidades em transações `paid` nos últimos 28 dias locais, incluindo hoje (`meta.sales_window`) |
+| `average_daily_units` | `units_sold / 28`, com 2 casas |
+| `days_of_cover` | `quantity / (units_sold / 28)`, com 1 casa: quantos dias o saldo dura no ritmo atual. `null` quando o produto não vendeu na janela |
+| `updated_at` | Quando a integração informou o saldo |
+
+- **Ordem:** zerados, depois baixos, depois os demais; dentro de cada grupo, menos dias de cobertura primeiro (sem vendas por último), depois nome e id.
+- **`summary`:** total de produtos com controle de estoque e quantos estão em cada status. Organização sem controle de estoque recebe `tracked: 0` e `items: []`.
+- Produtos excluídos (soft delete) e sem controle de estoque não aparecem.
+- 28 dias são 4 semanas inteiras, então cada dia da semana pesa igual na média.
+
+```http
+GET /api/v1/analytics/inventory
+X-Organization-Id: {organization-uuid}
+Accept: application/json
+```
+
+```json
+{
+  "data": {
+    "summary": { "tracked": 3, "ok": 1, "low": 1, "out": 1 },
+    "items": [
+      {
+        "product": { "id": "01a11bfa…", "name": "Mouse sem fio Pro", "sku": "PB-001-PRO" },
+        "quantity": 0,
+        "min_quantity": 2,
+        "status": "out",
+        "units_sold": 3,
+        "average_daily_units": 0.11,
+        "days_of_cover": 0.0,
+        "updated_at": "2026-10-13T23:16:00Z"
+      },
+      {
+        "product": { "id": "01a11bfa…", "name": "Mouse sem fio Essential", "sku": "PB-001-ESS" },
+        "quantity": 3,
+        "min_quantity": 6,
+        "status": "low",
+        "units_sold": 5,
+        "average_daily_units": 0.18,
+        "days_of_cover": 16.8,
+        "updated_at": "2026-10-13T23:15:42Z"
+      },
+      {
+        "product": { "id": "01a11bfa…", "name": "Teclado mecânico Essential", "sku": "PB-002-ESS" },
+        "quantity": 40,
+        "min_quantity": 5,
+        "status": "ok",
+        "units_sold": 51,
+        "average_daily_units": 1.82,
+        "days_of_cover": 22.0,
+        "updated_at": "2026-10-13T23:16:00Z"
+      }
+    ]
+  },
+  "meta": {
+    "sales_window": { "from": "2026-09-16", "to": "2026-10-13", "days": 28 },
+    "timezone": "America/Sao_Paulo"
+  }
+}
+```
+
+Uma única consulta por request: as unidades vendidas vêm de uma subconsulta agrupada por produto, ligada aos produtos com `LEFT JOIN`.

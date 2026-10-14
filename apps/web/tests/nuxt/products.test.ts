@@ -8,6 +8,7 @@ import { ApiError } from '~/utils/api-error'
 import { changedFields } from '~/composables/useProducts'
 import ProductFormDialog from '~/components/products/ProductFormDialog.vue'
 import ProductsPage from '~/pages/products/index.vue'
+import ProductDetailPage from '~/pages/products/[id].vue'
 import { clickButton, field, menuItems, paginated, type } from '../support/dom'
 
 const repository = vi.hoisted(() => ({
@@ -34,6 +35,7 @@ const product: Product = {
   price: '99.90',
   status: 'active',
   external_id: null,
+  stock: null,
   created_at: '2026-09-01T12:00:00Z',
   updated_at: '2026-09-01T12:00:00Z',
 }
@@ -179,6 +181,44 @@ describe('products page', () => {
 
     expect(wrapper.text()).toContain('O servidor encontrou um erro')
     expect(wrapper.text()).toContain('Tentar novamente')
+    wrapper.unmount()
+  })
+})
+
+describe('product detail page', () => {
+  beforeEach(() => {
+    Object.values(repository).forEach(mock => mock.mockReset())
+    clearNuxtData()
+    useAuthStore().setSession(user, org('owner'))
+  })
+
+  it('shows the stock reported by the integration', async () => {
+    repository.get.mockResolvedValue({
+      ...product,
+      units_sold: 12,
+      revenue: '1198.80',
+      stock: { quantity: 3, min_quantity: 6, status: 'low', updated_at: '2026-10-13T23:12:00Z' },
+    })
+
+    const wrapper = await mountSuspended(ProductDetailPage, { route: `/products/${product.id}` })
+    await flushPromises()
+
+    const stock = wrapper.get('[data-testid="product-stock"]').text().replace(/\s+/g, ' ')
+    expect(stock).toContain('Estoque')
+    expect(stock).toContain('Baixo')
+    expect(stock).toContain('3 un.')
+    expect(stock).toContain('Mínimo 6 un. · informado pela integração em 13/10/2026')
+    wrapper.unmount()
+  })
+
+  it('has no stock card for a product without stock control', async () => {
+    repository.get.mockResolvedValue({ ...product, units_sold: 0, revenue: '0.00' })
+
+    const wrapper = await mountSuspended(ProductDetailPage, { route: `/products/${product.id}` })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Unidades vendidas')
+    expect(wrapper.find('[data-testid="product-stock"]').exists()).toBe(false)
     wrapper.unmount()
   })
 })

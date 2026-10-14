@@ -1,12 +1,12 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
-import { getRevenue } from '@/api/analytics';
+import { getInventory, getRevenue } from '@/api/analytics';
 import { getDashboard } from '@/api/dashboard';
 import { granularityFor, presetRange, type PeriodPreset } from '@/lib/period';
 
 /**
- * KPIs and the revenue series, fetched in parallel. Keys always carry the organization, so
- * switching organizations can never show cached numbers of another one.
+ * KPIs, the revenue series and the stock, fetched in parallel. Keys always carry the
+ * organization, so switching organizations can never show cached numbers of another one.
  */
 export function useDashboard(organizationId: string, timezone: string, preset: PeriodPreset) {
   const range = presetRange(preset, timezone);
@@ -27,9 +27,15 @@ export function useDashboard(organizationId: string, timezone: string, preset: P
     enabled: withChart,
   });
 
+  // The current stock: the period does not apply.
+  const inventory = useQuery({
+    queryKey: ['org', organizationId, 'inventory'],
+    queryFn: ({ signal }) => getInventory(signal),
+  });
+
   async function refresh() {
-    await Promise.all([dashboard.refetch(), withChart ? revenue.refetch() : null]);
+    await Promise.all([dashboard.refetch(), inventory.refetch(), withChart ? revenue.refetch() : null]);
   }
 
-  return { range, withChart, dashboard, revenue, refresh };
+  return { range, withChart, dashboard, revenue, inventory, refresh };
 }

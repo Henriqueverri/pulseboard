@@ -3,6 +3,7 @@ import type {
   CustomerAnalyticsResponse,
   CustomerSort,
   DashboardResponse,
+  InventoryResponse,
   ProductAnalyticsResponse,
   ProductSort,
   RankingParams,
@@ -30,5 +31,7 @@ export function useAnalyticsRepository() {
 
     transactionStatus: (params: PeriodParams) =>
       apiFetch<TransactionStatusResponse>('/analytics/transactions', { query: { ...params } }),
+
+    inventory: () => apiFetch<InventoryResponse>('/analytics/inventory'),
   }
 }

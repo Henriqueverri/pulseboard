@@ -4,7 +4,7 @@ import type { ReportingPeriod } from './useReportingPeriod'
 export const DASHBOARD_RANKING_LIMIT = 5
 
 /**
- * The five dashboard sections load in parallel and fail independently: one broken
+ * The dashboard sections load in parallel and fail independently: one broken
  * endpoint shows an error in its own card while the others keep working.
  */
 export function useDashboard(period: ReportingPeriod) {
@@ -39,5 +39,8 @@ export function useDashboard(period: ReportingPeriod) {
     { watch: [period.params] },
   )
 
-  return { kpis, revenue, status, products, customers }
+  // A snapshot of the current stock: the period filter does not apply.
+  const inventory = useAsyncData(key('inventory'), () => repository.inventory())
+
+  return { kpis, revenue, status, products, customers, inventory }
 }

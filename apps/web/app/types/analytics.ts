@@ -1,4 +1,4 @@
-import type { AnalyticsMeta, CivilDate, Comparison, Money, PeriodParams } from './api'
+import type { AnalyticsMeta, CivilDate, Comparison, IsoDateTime, Money, PeriodParams, PeriodRange } from './api'
 import type { Granularity } from '~/utils/period'
 import type { ProductStatus } from './product'
 import type { TransactionStatus } from './transaction'
@@ -133,4 +133,31 @@ export interface RankingItem {
 export interface TransactionStatusResponse {
   data: TransactionStatusRow[]
   meta: AnalyticsMeta
+}
+
+export type StockStatus = 'ok' | 'low' | 'out'
+
+/** `days_of_cover` is `null` when the product did not sell in the sales window. */
+export interface InventoryItem {
+  product: { id: string, name: string, sku: string | null }
+  quantity: number
+  min_quantity: number
+  status: StockStatus
+  units_sold: number
+  average_daily_units: number
+  days_of_cover: number | null
+  updated_at: IsoDateTime | null
+}
+
+export interface InventorySummary {
+  tracked: number
+  ok: number
+  low: number
+  out: number
+}
+
+/** `GET /analytics/inventory`: a snapshot, most urgent first; not tied to the period filter. */
+export interface InventoryResponse {
+  data: { summary: InventorySummary, items: InventoryItem[] }
+  meta: { sales_window: PeriodRange, timezone: string }
 }
