@@ -90,6 +90,21 @@ class AnalyticsQueryBudgetTest extends TestCase
         }
     }
 
+    public function test_inventory_runs_a_single_query_whatever_the_volume(): void
+    {
+        Product::factory()->for($this->organization)->stocked(5, 2)->create();
+        $few = $this->measure(['/api/v1/analytics/inventory']);
+
+        $this->seedVolume();
+        Product::factory()->for($this->organization)->stocked(0, 2)->count(20)->create();
+        $this->organization->products()->update(['stock_tracked' => true]);
+        $many = $this->measure(['/api/v1/analytics/inventory']);
+
+        $this->assertSame(1, $few['/api/v1/analytics/inventory']['domain']);
+        $this->assertSame(1, $many['/api/v1/analytics/inventory']['domain']);
+        $this->assertSame($few['/api/v1/analytics/inventory']['total'], $many['/api/v1/analytics/inventory']['total']);
+    }
+
     public function test_revenue_never_runs_one_query_per_bucket(): void
     {
         $this->seedVolume();

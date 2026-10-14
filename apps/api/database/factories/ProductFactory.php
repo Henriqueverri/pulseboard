@@ -62,4 +62,17 @@ class ProductFactory extends Factory
     {
         return $this->state(fn () => ['status' => ProductStatus::Inactive]);
     }
+
+    /**
+     * Stock as last reported by the integrating system.
+     */
+    public function stocked(int $quantity, int $min = 0): static
+    {
+        return $this->state(fn () => [
+            'stock_tracked' => true,
+            'stock_quantity' => $quantity,
+            'stock_min' => $min,
+            'stock_updated_at' => now(),
+        ]);
+    }
 }

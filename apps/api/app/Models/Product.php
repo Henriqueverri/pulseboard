@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ProductStatus;
+use App\Enums\StockStatus;
 use App\Models\Concerns\BelongsToOrganization;
 use Database\Factories\ProductFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -44,7 +45,19 @@ class Product extends Model
         return [
             'price' => 'decimal:2',
             'status' => ProductStatus::class,
+            'stock_tracked' => 'boolean',
+            'stock_quantity' => 'integer',
+            'stock_min' => 'integer',
+            'stock_updated_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Null when the product has no stock control.
+     */
+    public function stockStatus(): ?StockStatus
+    {
+        return $this->stock_tracked ? StockStatus::of($this->stock_quantity, $this->stock_min) : null;
     }
 
     /**

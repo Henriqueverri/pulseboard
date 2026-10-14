@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\Analytics\CustomerAnalyticsController;
+use App\Http\Controllers\Api\Analytics\InventoryAnalyticsController;
 use App\Http\Controllers\Api\Analytics\ProductAnalyticsController;
 use App\Http\Controllers\Api\Analytics\RevenueAnalyticsController;
 use App\Http\Controllers\Api\Analytics\TransactionStatusAnalyticsController;
@@ -9,6 +10,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\HealthController;
+use App\Http\Controllers\Api\Ingest\IngestProductStockController;
 use App\Http\Controllers\Api\Ingest\IngestStatusChangeController;
 use App\Http\Controllers\Api\Ingest\IngestTransactionController;
 use App\Http\Controllers\Api\Insights\PeriodSummaryController;
@@ -47,6 +49,7 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/products', ProductAnalyticsController::class);
             Route::get('/customers', CustomerAnalyticsController::class);
             Route::get('/transactions', TransactionStatusAnalyticsController::class);
+            Route::get('/inventory', InventoryAnalyticsController::class);
         });
 
         // Reading the cached summary is free; only generating it is rate limited.
@@ -70,5 +73,6 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/transactions', [IngestTransactionController::class, 'store']);
         Route::get('/transactions/{externalId}', [IngestTransactionController::class, 'show']);
         Route::post('/transactions/{externalId}/status-changes', IngestStatusChangeController::class);
+        Route::put('/products/{sku}/stock', IngestProductStockController::class);
     });
 });

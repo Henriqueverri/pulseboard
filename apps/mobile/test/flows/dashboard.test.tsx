@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw';
 import type { DashboardResponse } from '@/api/types';
 import { presetRange } from '@/lib/period';
 
-import { DASHBOARD, demoStore, EMPTY_DASHBOARD, profile, REVENUE, secondStore } from '../fixtures';
+import { DASHBOARD, demoStore, EMPTY_DASHBOARD, INVENTORY, profile, REVENUE, secondStore } from '../fixtures';
 import { apiUrl, server } from '../server';
 import { storeSession } from '../session';
 
@@ -110,6 +110,34 @@ describe('dashboard', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Tentar novamente' }));
 
     expect(await screen.findByText('R$ 12.500,00')).toBeOnTheScreen();
+  });
+
+  it('lists the products to restock with how long they last', async () => {
+    await storeSession();
+    serve();
+    server.use(http.get(apiUrl('/analytics/inventory'), () => HttpResponse.json(INVENTORY)));
+
+    await openDashboard();
+
+    expect(await screen.findByText('Estoque')).toBeOnTheScreen();
+    expect(screen.getByText('1 zerado · 1 baixo · duração pela média dos últimos 28 dias')).toBeOnTheScreen();
+    expect(
+      screen.getByLabelText('Heineken Long Neck: Baixo, 3 un., mínimo 6. Dura cerca de 1,5 dia.'),
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByLabelText('Água sem gás: Zerado, 0 un., mínimo 4. Sem vendas nos últimos 28 dias.'),
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('Corona Extra')).toBeNull();
+  });
+
+  it('has no stock card when the organization does not control stock', async () => {
+    await storeSession();
+    serve();
+
+    await openDashboard();
+
+    await screen.findByText('R$ 12.500,00');
+    expect(screen.queryByText('Estoque')).toBeNull();
   });
 
   it('goes back to login when the token expires', async () => {

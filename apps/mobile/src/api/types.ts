@@ -78,6 +78,29 @@ export interface RevenueResponse {
   meta: AnalyticsMeta & { granularity: 'day' | 'week' | 'month' };
 }
 
+export type StockStatus = 'ok' | 'low' | 'out';
+
+/** `days_of_cover` is `null` when the product did not sell in the sales window. */
+export interface InventoryItem {
+  product: { id: string; name: string; sku: string | null };
+  quantity: number;
+  min_quantity: number;
+  status: StockStatus;
+  units_sold: number;
+  average_daily_units: number;
+  days_of_cover: number | null;
+  updated_at: IsoDateTime | null;
+}
+
+/** `GET /analytics/inventory`: the current stock, most urgent first; no period. */
+export interface InventoryResponse {
+  data: {
+    summary: { tracked: number; ok: number; low: number; out: number };
+    items: InventoryItem[];
+  };
+  meta: { sales_window: PeriodRange; timezone: string };
+}
+
 /** Laravel paginator envelope; only the `meta` fields the app reads. */
 export interface Paginated<T> {
   data: T[];

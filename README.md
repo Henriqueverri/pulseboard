@@ -69,7 +69,8 @@ Uma aplicação para acompanhar a operação comercial de um negócio: *quanto v
 
 - **Organizações e papéis** — o cadastro cria o usuário, a organização e a membership `owner`; `owner` e `member` têm permissões diferentes, aplicadas pela API.
 - **Produtos e clientes** — CRUD com busca, detalhe com métricas de venda, ID externo para a integração e exclusão que preserva o histórico (soft delete quando há vendas).
-- **Integração por API** — sistemas externos registram vendas e mudanças de status com API Keys da organização, criadas e revogadas pelos owners.
+- **Integração por API** — sistemas externos registram vendas, mudanças de status e o saldo de estoque com API Keys da organização, criadas e revogadas pelos owners.
+- **Estoque** — o sistema integrado informa o saldo de cada produto; o dashboard (web e app) mostra os itens baixos ou zerados e quantos dias o saldo dura no ritmo de venda dos últimos 28 dias.
 - **Transações** — histórico de vendas com itens, preço no momento da venda, origem (demo ou integração) e linha do tempo de status; na UI é somente leitura.
 - **Dashboard e analytics** — receita, pedidos, ticket médio e clientes (ativos, novos e recorrentes), receita por dia/semana/mês, rankings e distribuição por status, sempre com o período anterior ao lado.
 - **Estado na URL** — período, filtros, ordenação e paginação ficam na query string: links compartilháveis, voltar/avançar funcionam.
@@ -128,9 +129,9 @@ O banco guarda UTC; o calendário de negócio é o fuso IANA da organização (`
 
 | Suíte | Ferramenta | O que cobre |
 |-------|-----------|-------------|
-| API | PHPUnit — 608 testes | Auth, isolamento entre organizações, CRUD e regras de exclusão, analytics com dados controlados e sobre o dataset de demo, orçamento de consultas, timezone e horário de verão, API Keys, ingestão (validação, idempotência, lifecycle, concorrência real, orçamento de queries, logs), trusted proxies, comandos de release e demo |
-| Web | Vitest + @nuxt/test-utils — 195 testes | Utilitários (dinheiro, datas, períodos, erros), `useApiClient` (CSRF, 419, 401, `Retry-After`, `X-Request-Id`), store de sessão, composables e páginas com fixtures no formato real da API, linha do tempo de status e o segredo da API Key exibido uma única vez |
-| Mobile | Jest (`jest-expo`) + Testing Library + MSW — 78 testes | Client HTTP (Bearer, `X-Organization-Id`, 401/403, `Retry-After`, `X-Request-Id`), SecureStore, datas e períodos no timezone da organização (inclusive horário de verão), e fluxos com Expo Router: login, restauração e expiração da sessão, troca de organização, dashboard e transações (paginação, filtros, detalhe e linha do tempo) |
+| API | PHPUnit — 864 testes | Auth, isolamento entre organizações, CRUD e regras de exclusão, analytics com dados controlados e sobre o dataset de demo, orçamento de consultas, timezone e horário de verão, API Keys, ingestão (validação, idempotência, lifecycle, concorrência real, orçamento de queries, logs), estoque (atualizações fora de ordem, dias de cobertura), trusted proxies, comandos de release e demo |
+| Web | Vitest + @nuxt/test-utils — 242 testes | Utilitários (dinheiro, datas, períodos, erros), `useApiClient` (CSRF, 419, 401, `Retry-After`, `X-Request-Id`), store de sessão, composables e páginas com fixtures no formato real da API, linha do tempo de status e o segredo da API Key exibido uma única vez |
+| Mobile | Jest (`jest-expo`) + Testing Library + MSW — 84 testes | Client HTTP (Bearer, `X-Organization-Id`, 401/403, `Retry-After`, `X-Request-Id`), SecureStore, datas e períodos no timezone da organização (inclusive horário de verão), e fluxos com Expo Router: login, restauração e expiração da sessão, troca de organização, dashboard com o card de estoque e transações (paginação, filtros, detalhe e linha do tempo) |
 | E2E | Playwright + axe | Smoke do fluxo principal e fluxo de integração (criar chave na UI → ingerir → achar pelo ID externo → revogar → 401), contra o build de produção e um PostgreSQL descartável |
 
 Localmente a suíte da API roda em SQLite (10 testes de horário de verão e de concorrência ficam de fora); na CI roda inteira em PostgreSQL. Como rodar: [`docs/testing.md`](docs/testing.md).

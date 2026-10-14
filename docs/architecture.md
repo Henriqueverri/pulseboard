@@ -127,7 +127,7 @@ Testes dedicados (`ApiTenantIsolationTest`, `AnalyticsTenantIsolationTest`, `Ten
 - **Um service por endpoint** (`app/Services/Analytics`); Revenue, Products e Customers reutilizam os KPIs do `DashboardService`, então o resumo de cada tela é, por construção, o mesmo número do dashboard.
 - **Comparação com o período anterior** de mesma duração em todas as métricas (`value`, `previous`, `change`), lida na mesma varredura do período atual (`CASE` sobre o intervalo contíguo anterior + atual).
 - **Dinheiro como string decimal** (`"1250.00"`) na API; o front formata com `Intl` na moeda da organização. Nada de float para valores monetários.
-- **Número fixo de consultas por endpoint** (Dashboard 1, Revenue 2, Products 3, Customers 4, Status 1), independente de volume, `limit`, granularidade ou tamanho do período. `AnalyticsQueryBudgetTest` trava esses limites.
+- **Número fixo de consultas por endpoint** (Dashboard 1, Revenue 2, Products 3, Customers 4, Status 1, Inventory 1), independente de volume, `limit`, granularidade ou tamanho do período. `AnalyticsQueryBudgetTest` trava esses limites.
 - **Consistência entre endpoints testada** (`AnalyticsCrossEndpointConsistencyTest`): receita do dashboard = soma da série = soma do ranking completo de produtos = linha `paid` do status; pedidos batem com a listagem de transações; o `previous` de cada métrica é igual ao `value` de uma consulta ao período anterior.
 
 ### Performance
@@ -221,6 +221,15 @@ pending ──► paid ──► refunded
 - **O banco também protege a máquina:** como nenhum estado é revisitado, `UNIQUE (transaction_id, to_status)` impede uma transição duplicada mesmo que o lock falhe.
 - **Ordem do histórico pela cadeia,** a partir de `from_status: null`, e não por timestamp: duas mudanças podem ter o mesmo `occurred_at` (é o caso do backfill dos dados antigos).
 - **Mudança de status como recurso** (`POST …/status-changes`), não `PATCH` no campo: 201 aplicada, 200 se já está no status pedido, 409 `invalid_transition`.
+
+### Estoque espelhado
+
+O estoque pertence ao sistema integrado (o POS faz a baixa no pagamento); o PulseBoard guarda só a última foto de cada produto, para mostrar o que está acabando.
+
+- **Saldo absoluto, não delta** (`PUT …/products/{sku}/stock`): reenviar é idempotente por natureza, e perder uma entrega não acumula erro, porque a próxima traz o saldo certo.
+- **Último a acontecer vence, não o último a chegar:** um único `UPDATE … WHERE stock_updated_at IS NULL OR stock_updated_at < :occurred_at`. Retry e entrega fora de ordem caem no mesmo caminho (nenhuma linha afetada → 200 `Idempotent-Replayed`), sem lock nem leitura antes da escrita. `stock_updated_at` guarda microssegundos para ordenar duas vendas no mesmo segundo.
+- **Somente leitura no painel:** o saldo não é `fillable` e não aparece nos formulários, então não existem duas fontes da verdade.
+- **Dias de cobertura** = saldo ÷ média diária de unidades pagas em 28 dias locais (quatro semanas inteiras), numa consulta com subconsulta agrupada.
 
 ### Síncrono, não assíncrono
 

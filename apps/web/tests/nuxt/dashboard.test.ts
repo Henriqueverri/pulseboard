@@ -8,6 +8,7 @@ import type { Organization } from '~/types/auth'
 import type {
   CustomerAnalyticsResponse,
   DashboardResponse,
+  InventoryResponse,
   ProductAnalyticsResponse,
   RevenueResponse,
   TransactionStatusResponse,
@@ -21,6 +22,7 @@ const repository = vi.hoisted(() => ({
   transactionStatus: vi.fn(),
   products: vi.fn(),
   customers: vi.fn(),
+  inventory: vi.fn(),
 }))
 
 vi.mock('~/repositories/analyticsRepository', () => ({
@@ -97,6 +99,19 @@ const customers: CustomerAnalyticsResponse = {
   meta: { ...meta, sort: 'revenue', limit: 5 },
 }
 
+const inventory: InventoryResponse = {
+  data: {
+    summary: { tracked: 8, ok: 1, low: 6, out: 1 },
+    items: [
+      { product: { id: 'i1', name: 'Água sem gás', sku: 'BAR-AGU' }, quantity: 0, min_quantity: 4, status: 'out', units_sold: 0, average_daily_units: 0, days_of_cover: null, updated_at: '2026-09-29T14:00:00Z' },
+      { product: { id: 'i2', name: 'Heineken Long Neck', sku: 'BAR-HEI' }, quantity: 3, min_quantity: 6, status: 'low', units_sold: 56, average_daily_units: 2, days_of_cover: 1.5, updated_at: '2026-09-29T14:00:00Z' },
+      ...[3, 4, 5, 6, 7].map(n => ({ product: { id: `i${n}`, name: `Cerveja ${n}`, sku: null }, quantity: 5, min_quantity: 6, status: 'low' as const, units_sold: 28, average_daily_units: 1, days_of_cover: 5, updated_at: null })),
+      { product: { id: 'i8', name: 'Corona Extra', sku: 'BAR-COR' }, quantity: 24, min_quantity: 6, status: 'ok', units_sold: 28, average_daily_units: 1, days_of_cover: 24, updated_at: null },
+    ],
+  },
+  meta: { sales_window: { from: '2026-09-02', to: '2026-09-29', days: 28 }, timezone: 'America/Sao_Paulo' },
+}
+
 mockComponent('~/components/charts/RevenueChart.client.vue', {
   setup: () => () => h('div', { 'data-chart': '' }),
 })
@@ -122,6 +137,7 @@ beforeEach(() => {
   repository.transactionStatus.mockResolvedValue(status)
   repository.products.mockResolvedValue(products)
   repository.customers.mockResolvedValue(customers)
+  repository.inventory.mockResolvedValue(inventory)
   clearNuxtData()
   useAuthStore().setSession({ id: 'u1', name: 'Member', email: 'member@example.com' }, org)
 })
@@ -239,6 +255,59 @@ describe('dashboard page', () => {
     expect(wrapper.text()).toContain('Nenhuma transação no período')
     expect(wrapper.text()).toContain('Nenhum produto vendido no período')
     expect(wrapper.text()).toContain('Nenhum cliente comprou no período')
+    wrapper.unmount()
+  })
+
+  it('lists the products to restock, most urgent first, with how long they last', async () => {
+    const wrapper = await mountSuspended(DashboardPage, { route: '/dashboard' })
+    await flushPromises()
+
+    const card = section(wrapper, 'Estoque')
+    const rows = card.findAll('li').map(row => row.text().replace(/\s+/g, ' '))
+
+    expect(rows).toHaveLength(5)
+    expect(rows[0]).toMatch(/Água sem gás.*Sem vendas nos últimos 28 dias.*0 un\..*mín\. 4.*Zerado/)
+    expect(rows[1]).toMatch(/Heineken Long Neck.*Dura cerca de 1,5 dia.*3 un\..*mín\. 6.*Baixo/)
+    expect(card.text()).not.toContain('Corona Extra')
+    expect(card.findAll('[data-testid="stock-summary"] > span').map(tag => tag.text())).toEqual(['1 zerado', '6 baixos'])
+    expect(card.text()).toContain('E mais 2 produtos precisando de reposição.')
+    expect(card.find('a[href="/products/i2"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('does not load stock again when the period changes', async () => {
+    const wrapper = await mountSuspended(DashboardPage, { route: '/dashboard' })
+    await flushPromises()
+
+    await useRouter().push('/dashboard?period=7d')
+    await vi.waitFor(() => expect(repository.dashboard).toHaveBeenCalledTimes(2))
+
+    expect(repository.inventory).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('hides the stock card from organizations without stock control', async () => {
+    repository.inventory.mockResolvedValue({ ...inventory, data: { summary: { tracked: 0, ok: 0, low: 0, out: 0 }, items: [] } })
+
+    const wrapper = await mountSuspended(DashboardPage, { route: '/dashboard' })
+    await flushPromises()
+
+    expect(wrapper.findAll('section h2').map(title => title.text())).not.toContain('Estoque')
+    wrapper.unmount()
+  })
+
+  it('reports when every tracked product is above the minimum', async () => {
+    repository.inventory.mockResolvedValue({
+      ...inventory,
+      data: { summary: { tracked: 1, ok: 1, low: 0, out: 0 }, items: inventory.data.items.slice(-1) },
+    })
+
+    const wrapper = await mountSuspended(DashboardPage, { route: '/dashboard' })
+    await flushPromises()
+
+    const card = section(wrapper, 'Estoque').text()
+    expect(card).toContain('Todo o estoque acima do mínimo')
+    expect(card).toContain('1 produto com controle de estoque.')
     wrapper.unmount()
   })
 

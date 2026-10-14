@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { RefreshControl, StyleSheet, View } from 'react-native';
 
+import { InventoryCard } from '@/features/dashboard/InventoryCard';
 import { KpiCard } from '@/features/dashboard/KpiCard';
 import { QuickSummary } from '@/features/dashboard/QuickSummary';
 import { RevenueChart } from '@/features/dashboard/RevenueChart';
@@ -22,7 +23,7 @@ export default function DashboardScreen() {
   const organization = useActiveOrganization();
   const [preset, setPreset] = useState<PeriodPreset>(DEFAULT_PRESET);
   const [refreshing, setRefreshing] = useState(false);
-  const { withChart, dashboard, revenue, refresh } = useDashboard(organization.id, organization.timezone, preset);
+  const { withChart, dashboard, revenue, inventory, refresh } = useDashboard(organization.id, organization.timezone, preset);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -97,6 +98,17 @@ export default function DashboardScreen() {
             />
           ) : null}
         </View>
+      ) : null}
+
+      {/* Organizations without stock control never see the card. */}
+      {inventory.data && inventory.data.data.summary.tracked > 0 ? <InventoryCard inventory={inventory.data} /> : null}
+      {inventory.isError && !inventory.data ? (
+        <ErrorState
+          title="Não foi possível carregar o estoque"
+          error={inventory.error}
+          onRetry={() => void inventory.refetch()}
+          retrying={inventory.isFetching}
+        />
       ) : null}
     </Screen>
   );

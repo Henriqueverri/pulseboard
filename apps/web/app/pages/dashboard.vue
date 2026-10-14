@@ -4,7 +4,7 @@ import { PhArrowRight } from '@phosphor-icons/vue'
 useHead({ title: 'Dashboard · PulseBoard' })
 
 const period = useReportingPeriod()
-const { kpis, revenue, status, products, customers } = useDashboard(period)
+const { kpis, revenue, status, products, customers, inventory } = useDashboard(period)
 const { currency } = useOrganization()
 const { available: insightsAvailable } = useInsightsAvailability()
 
@@ -26,6 +26,9 @@ const granularity = computed({
   get: () => period.granularity.value,
   set: value => period.setGranularity(value),
 })
+
+/** Organizations without stock control (no integration reporting it) never see the card. */
+const usesStock = computed(() => inventory.error.value != null || (inventory.data.value?.data.summary.tracked ?? 0) > 0)
 
 const productItems = computed(() => productRankingItems(products.data.value?.data ?? [], currency.value))
 const customerItems = computed(() => customerRankingItems(customers.data.value?.data ?? [], currency.value))
@@ -82,7 +85,18 @@ const customerItems = computed(() => customerRankingItems(customers.data.value?.
         />
       </div>
 
-      <div class="grid gap-6 lg:grid-cols-2">
+      <div
+        class="grid gap-6"
+        :class="usesStock ? 'lg:grid-cols-3' : 'lg:grid-cols-2'"
+      >
+        <DashboardInventoryCard
+          v-if="usesStock"
+          :response="inventory.data.value"
+          :loading="loading(inventory)"
+          :refreshing="refreshing(inventory)"
+          :error="inventory.error.value"
+          @retry="inventory.refresh()"
+        />
         <DataCard
           title="Top 5 produtos"
           description="Por receita de transações pagas"

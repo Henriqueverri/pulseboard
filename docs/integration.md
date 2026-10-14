@@ -24,6 +24,7 @@ read -rs PULSEBOARD_API_KEY && export PULSEBOARD_API_KEY   # cole a chave e tecl
 | `POST` | `/ingest/transactions` | Registra uma transação (idempotente por `external_id`) |
 | `GET` | `/ingest/transactions/{external_id}` | Reconciliação: a transação foi gravada? Em que status está? |
 | `POST` | `/ingest/transactions/{external_id}/status-changes` | Muda o status (pagamento, estorno, cancelamento) |
+| `PUT` | `/ingest/products/{sku}/stock` | Informa o saldo atual de um produto (opcional; ver [Estoque](#8-estoque)) |
 
 Não há endpoint de lote, de edição nem de exclusão: cada venda é uma requisição, e o histórico não se apaga (cancelamento e estorno cobrem esses casos).
 
@@ -398,7 +399,87 @@ curl -sS -i -X POST "$PULSEBOARD_API_URL/ingest/transactions/order_1002/status-c
 }
 ```
 
-## 8. Erros de validação
+## 8. Estoque
+
+Opcional. Se o seu sistema controla estoque, ele pode informar o saldo de cada produto, e o PulseBoard mostra os itens baixos ou zerados e quantos dias o saldo dura no ritmo de venda atual. O estoque continua sendo do seu sistema: o PulseBoard só guarda a última foto, não calcula baixa a partir das vendas e não deixa ninguém editar o saldo pelo painel.
+
+- Cada requisição traz o **saldo absoluto** (não um delta), o mínimo e o instante da movimentação em `occurred_at`. Envie uma depois de cada movimentação: venda, estorno, entrada ou ajuste.
+- Só a informação mais recente vale. Uma requisição com `occurred_at` igual ou anterior ao que já está gravado não muda nada e responde 200 com `Idempotent-Replayed: true`. Por isso reenviar é sempre seguro, e uma requisição atrasada por retry nunca sobrescreve um saldo mais novo.
+- `occurred_at` aceita até microssegundos, e eles contam na comparação: use o horário da movimentação com a maior precisão que tiver, para que duas vendas no mesmo segundo fiquem na ordem certa.
+- O produto é identificado pelo SKU, como nos itens da venda. `"tracked": false` desliga o controle de estoque do produto no PulseBoard.
+
+```bash
+curl -sS -i -X PUT "$PULSEBOARD_API_URL/ingest/products/PB-001-ESS/stock" \
+  -H "Authorization: Bearer $PULSEBOARD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{"tracked": true, "quantity": 3, "min_quantity": 6, "occurred_at": "2026-10-13T20:15:42.318204-03:00"}'
+```
+
+```http
+HTTP/1.1 200 OK
+```
+
+```json
+{
+  "data": {
+    "product_id": "01a11bfa…",
+    "sku": "PB-001-ESS",
+    "tracked": true,
+    "quantity": 3,
+    "min_quantity": 6,
+    "status": "low",
+    "updated_at": "2026-10-13T23:15:42.318204Z"
+  }
+}
+```
+
+`status` é `out` com saldo zero, `low` com saldo igual ou abaixo do mínimo e `ok` acima dele; é `null` com `"tracked": false`.
+
+| Campo | Regra |
+|-------|-------|
+| `tracked` | Obrigatório, `true` ou `false` (booleano JSON, não string) |
+| `quantity` | Obrigatório, inteiro maior ou igual a 0 |
+| `min_quantity` | Obrigatório, inteiro maior ou igual a 0 |
+| `occurred_at` | Obrigatório, ISO 8601 com offset, até 5 minutos no futuro |
+
+| Situação | Resposta |
+|----------|----------|
+| Saldo aplicado | 200 com o estoque gravado |
+| `occurred_at` igual ou anterior ao gravado (retry ou entrega fora de ordem) | 200 com `Idempotent-Replayed: true` e o estoque que continua valendo |
+| SKU inexistente ou de produto excluído | 422 `validation_failed`, `errors: { "sku": ["The selected product SKU is invalid."] }` |
+| Campo inválido | 422 `validation_failed` com `errors` por campo |
+
+Uma entrega atrasada, com `occurred_at` anterior ao saldo já gravado:
+
+```bash
+curl -sS -i -X PUT "$PULSEBOARD_API_URL/ingest/products/PB-001-ESS/stock" \
+  -H "Authorization: Bearer $PULSEBOARD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{"tracked": true, "quantity": 4, "min_quantity": 6, "occurred_at": "2026-10-13T20:10:00-03:00"}'
+```
+
+```http
+HTTP/1.1 200 OK
+Idempotent-Replayed: true
+```
+
+```json
+{
+  "data": {
+    "product_id": "01a11bfa…",
+    "sku": "PB-001-ESS",
+    "tracked": true,
+    "quantity": 3,
+    "min_quantity": 6,
+    "status": "low",
+    "updated_at": "2026-10-13T23:15:42.318204Z"
+  }
+}
+```
+
+## 9. Erros de validação
 
 Cada erro vem por campo em `errors`, com o caminho do campo (`items.1.sku` é o SKU do segundo item):
 
@@ -443,9 +524,9 @@ Outras respostas reais, para o mesmo pedido com um problema de cada vez:
 
 Nos erros de validação a transação não é gravada, então o mesmo `external_id` pode ser reenviado depois da correção.
 
-## 9. Limites
+## 10. Limites
 
-- **120 requisições por minuto por chave**, somando os três endpoints. Os headers `X-RateLimit-Limit` e `X-RateLimit-Remaining` mostram o consumo; acima do limite:
+- **120 requisições por minuto por chave**, somando todos os endpoints de ingestão. Os headers `X-RateLimit-Limit` e `X-RateLimit-Remaining` mostram o consumo; acima do limite:
 
   ```http
   HTTP/1.1 429 Too Many Requests
@@ -462,16 +543,17 @@ Nos erros de validação a transação não é gravada, então o mesmo `external
 - `occurred_at` até 5 minutos no futuro (tolerância para relógios dessincronizados).
 - Valores até `9999999999.99`, sempre como string decimal.
 
-## 10. Rastreabilidade
+## 11. Rastreabilidade
 
 Toda resposta, inclusive de erro, traz `X-Request-Id`. Se você enviar um `X-Request-Id` próprio (de 8 a 64 caracteres em `A-Z a-z 0-9 . _ -`), ele é mantido; senão a API gera um UUID. Usar o ID do seu próprio log (como `checkout-order-1001` no primeiro exemplo) facilita cruzar os dois lados.
 
-Para pedir suporte, informe o `X-Request-Id` ou o `external_id`. Do lado do PulseBoard, cada requisição gera uma linha de log com o resultado (`created`, `replayed`, `conflict`, `rejected`, `transitioned`), o `code`, o prefixo da chave e a duração; a chave, o header `Authorization` e os dados pessoais do cliente nunca são registrados.
+Para pedir suporte, informe o `X-Request-Id` ou o `external_id`. Do lado do PulseBoard, cada requisição gera uma linha de log com o resultado (`created`, `replayed`, `conflict`, `rejected`, `transitioned`, `updated`), o `code`, o prefixo da chave e a duração; a chave, o header `Authorization` e os dados pessoais do cliente nunca são registrados.
 
-## 11. Onde a venda aparece no PulseBoard
+## 12. Onde a venda aparece no PulseBoard
 
 - **Transações:** a venda aparece com a origem "Integração" e pode ser buscada pelo `external_id`. O detalhe mostra itens, cliente, identificação e a linha do tempo de status.
 - **Dashboard e analytics:** a transação entra na mesma tabela e nas mesmas consultas das demais, então uma venda `paid` muda receita, pedidos e rankings na próxima leitura. Os números consideram o status **atual**: um estorno posterior tira a venda do período em que ela ocorreu (limitação conhecida, ver [`architecture.md`](architecture.md#limitações-conhecidas)).
+- **Estoque:** com o saldo informado, o dashboard (no web e no app) ganha o card "Estoque" com os produtos baixos ou zerados e quantos dias o saldo dura pela média de vendas pagas dos últimos 28 dias. A página do produto mostra o saldo, o mínimo e quando ele foi informado.
 - **API Keys:** a coluna "Último uso" mostra quando a chave autenticou pela última vez (atualizada no máximo uma vez por minuto).
 
 ## Testando na demo

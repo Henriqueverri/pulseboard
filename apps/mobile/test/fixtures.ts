@@ -1,6 +1,7 @@
 import type {
   AuthProfile,
   DashboardResponse,
+  InventoryResponse,
   IssuedToken,
   Organization,
   Paginated,
@@ -79,6 +80,26 @@ export const REVENUE: RevenueResponse = {
   ],
   summary: { revenue: DASHBOARD.data.revenue, orders: DASHBOARD.data.orders },
   meta: { ...ANALYTICS_META, granularity: 'day' },
+};
+
+const SALES_WINDOW = { sales_window: { from: '2026-09-03', to: '2026-09-30', days: 28 }, timezone: 'America/Sao_Paulo' };
+
+/** An organization whose integration does not report stock. */
+export const NO_INVENTORY: InventoryResponse = {
+  data: { summary: { tracked: 0, ok: 0, low: 0, out: 0 }, items: [] },
+  meta: SALES_WINDOW,
+};
+
+export const INVENTORY: InventoryResponse = {
+  data: {
+    summary: { tracked: 3, ok: 1, low: 1, out: 1 },
+    items: [
+      { product: { id: 'p-agu', name: 'Água sem gás', sku: 'BAR-AGU' }, quantity: 0, min_quantity: 4, status: 'out', units_sold: 0, average_daily_units: 0, days_of_cover: null, updated_at: '2026-09-30T14:00:00Z' },
+      { product: { id: 'p-hei', name: 'Heineken Long Neck', sku: 'BAR-HEI' }, quantity: 3, min_quantity: 6, status: 'low', units_sold: 56, average_daily_units: 2, days_of_cover: 1.5, updated_at: '2026-09-30T14:00:00Z' },
+      { product: { id: 'p-cor', name: 'Corona Extra', sku: 'BAR-COR' }, quantity: 24, min_quantity: 6, status: 'ok', units_sold: 28, average_daily_units: 1, days_of_cover: 24, updated_at: '2026-09-30T14:00:00Z' },
+    ],
+  },
+  meta: SALES_WINDOW,
 };
 
 export function transactionId(index: number): string {
