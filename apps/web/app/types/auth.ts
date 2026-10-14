@@ -23,6 +23,8 @@ export interface Organization {
   currency: string
   timezone: string
   insights: OrganizationInsights
+  /** Decimal string ("1500.00"); null without a goal. Reaching it pushes an alert to the mobile app. */
+  daily_revenue_goal: string | null
   role?: OrganizationRole
 }
 

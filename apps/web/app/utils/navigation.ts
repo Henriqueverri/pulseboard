@@ -1,5 +1,5 @@
 import type { Component } from 'vue'
-import { PhChartLine, PhKey, PhPackage, PhReceipt, PhSparkle, PhSquaresFour, PhUsers } from '@phosphor-icons/vue'
+import { PhBell, PhChartLine, PhKey, PhPackage, PhReceipt, PhSparkle, PhSquaresFour, PhUsers } from '@phosphor-icons/vue'
 
 export interface NavItem {
   label: string
@@ -40,6 +40,7 @@ export const NAVIGATION: NavGroup[] = [
     label: 'Configurações',
     items: [
       { label: 'Insights', to: '/settings/insights', icon: PhSparkle, match: '/settings/insights' },
+      { label: 'Notificações', to: '/settings/notifications', icon: PhBell, match: '/settings/notifications' },
     ],
   },
 ]
@@ -59,6 +60,7 @@ export const SEGMENT_LABELS: Record<string, string> = {
   'settings': 'Configurações',
   'api-keys': 'API Keys',
   'insights': 'Insights',
+  'notifications': 'Notificações',
 }
 
 export interface Breadcrumb {

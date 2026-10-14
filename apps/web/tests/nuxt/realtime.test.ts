@@ -64,8 +64,8 @@ vi.mock('~/utils/echo', () => ({ createEcho: createEchoMock }))
 mockNuxtImport('refreshNuxtData', () => refreshMock)
 
 const user = { id: 'u1', name: 'Owner', email: 'owner@example.com' }
-const orgA: Organization = { id: '0199a000-0000-7000-8000-00000000000a', name: 'Loja A', slug: 'a', currency: 'BRL', timezone: 'America/Sao_Paulo', insights: { available: false, enabled: false }, role: 'owner' }
-const orgB: Organization = { id: '0199a000-0000-7000-8000-00000000000b', name: 'Loja B', slug: 'b', currency: 'USD', timezone: 'UTC', insights: { available: false, enabled: false }, role: 'member' }
+const orgA: Organization = { id: '0199a000-0000-7000-8000-00000000000a', name: 'Loja A', slug: 'a', currency: 'BRL', timezone: 'America/Sao_Paulo', insights: { available: false, enabled: false }, daily_revenue_goal: null, role: 'owner' }
+const orgB: Organization = { id: '0199a000-0000-7000-8000-00000000000b', name: 'Loja B', slug: 'b', currency: 'USD', timezone: 'UTC', insights: { available: false, enabled: false }, daily_revenue_goal: null, role: 'member' }
 
 const enabled: RealtimeConfig = { enabled: true, key: 'public-key', host: 'api.example.test', port: 443, scheme: 'https', auth_endpoint: '/api/v1/broadcasting/auth' }
 

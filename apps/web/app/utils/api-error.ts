@@ -86,6 +86,7 @@ const KNOWN_MESSAGES: Array<[RegExp, string]> = [
   [/password field must be at least/i, 'A senha deve ter pelo menos 8 caracteres.'],
   [/period may not be longer than/i, 'O período pode ter no máximo 366 dias.'],
   [/to date must be on or after/i, 'A data final deve ser igual ou posterior à inicial.'],
+  [/daily revenue goal field must/i, 'Informe uma meta maior que zero, com até 2 casas decimais.'],
   [/^The .+ field is required\.?$/i, 'Campo obrigatório.'],
   [/must be a valid email address/i, 'Informe um e-mail válido.'],
   [/^The .+ field must not be greater than (\d+) characters\.?$/i, 'Use no máximo $1 caracteres.'],

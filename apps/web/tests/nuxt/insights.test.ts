@@ -41,7 +41,7 @@ const user = { id: 'u1', name: 'Owner', email: 'owner@example.com' }
 
 function org(role: OrganizationRole, insights: Organization['insights'] = { available: true, enabled: true }): Organization {
   return {
-    id: '0199a000-0000-7000-8000-00000000000a', name: 'Loja', slug: 'loja', currency: 'BRL', timezone: 'America/Sao_Paulo', insights, role,
+    id: '0199a000-0000-7000-8000-00000000000a', name: 'Loja', slug: 'loja', currency: 'BRL', timezone: 'America/Sao_Paulo', insights, daily_revenue_goal: null, role,
   }
 }
 
