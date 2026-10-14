@@ -62,7 +62,29 @@ Personal Access Token do Sanctum (`POST /api/v1/auth/tokens`), sem cookie, sem r
 - A aba Conta mostra o usuário, a organização atual (papel, moeda e timezone), a troca de organização com confirmação e a versão do app com o host da API em uso.
 - Login lento (> 5 s) avisa que o servidor pode estar acordando: a API de produção roda no plano gratuito do Render e o primeiro acesso pode levar até um minuto.
 - API fora do ar ou sem rede: cada tela mostra o erro com "Tentar novamente" e o `X-Request-Id` quando houver resposta; erros de rede e 5xx são repetidos automaticamente duas vezes. Ao voltar para o app, dados com mais de 30 s são recarregados.
-- Fora do escopo: modo offline, push, refresh token, dark mode.
+- Fora do escopo: modo offline, refresh token, dark mode.
+
+## Notificações push
+
+Avisos de estoque baixo ou zerado e de meta diária batida (regras em [`docs/api.md`](../../docs/api.md#notificações-push)), via `expo-notifications` e Expo Push Service:
+
+- Depois do login (e a cada abertura do app), o app pede a permissão, obtém o Expo push token e o registra em `POST /devices/push-token`. O dispositivo fica preso ao token de acesso: sair da conta já o remove na API.
+- A aba Conta tem o switch "Avisos no celular". Desligar remove o dispositivo (`DELETE /devices/push-token`) e fica salvo no aparelho; a permissão não é pedida de novo. Permissão bloqueada mostra um atalho para as configurações do sistema.
+- Tocar no aviso troca para a organização dele (se o usuário for membro) e abre Início (estoque) ou Transações (meta). Só rotas conhecidas são aceitas.
+- No Android os avisos usam o canal `alerts` ("Alertas", importância alta), criado antes do pedido de permissão.
+- **Expo Go:** no Android não recebe push remoto desde o SDK 53 (a Conta avisa e o switch fica desabilitado); é preciso o APK. No iOS o Expo Go recebe.
+
+### Configuração manual (uma vez)
+
+O push no Android passa pelo Firebase Cloud Messaging; as credenciais não ficam no repositório nem na API:
+
+1. Crie um projeto no [Firebase Console](https://console.firebase.google.com) e adicione um app Android com o pacote `dev.henriqueverri.pulseboard`.
+2. Baixe o `google-services.json` e salve em `apps/mobile/google-services.json`. Pode ser commitado (só identificadores públicos); o `app.config.ts` o usa quando existe, e sem ele o APK não obtém push token.
+3. Em *Configurações do projeto → Contas de serviço*, gere uma chave privada (JSON). **Não commite este arquivo.**
+4. Envie a chave ao EAS: `npx eas-cli credentials` → Android → `preview` (e `production`) → *Google Service Account* → *Manage your Google Service Account Key for Push Notifications (FCM V1)* → *Upload a new service account key*.
+5. Gere um novo APK (`npx eas-cli build --platform android --profile preview`): o APK anterior não tem `expo-notifications`.
+
+Na API, `PUSH_DRIVER=expo` é o padrão; `EXPO_ACCESS_TOKEN` só é necessário se o *Enhanced Security for Push Notifications* for ligado no projeto Expo. Para testar o envio sem a API: [Expo push notifications tool](https://expo.dev/notifications) com o token registrado.
 
 ## Build de preview (APK)
 
@@ -92,6 +114,7 @@ A CI compila o bundle Hermes, mas não executa o app. Antes de publicar um APK, 
 - [ ] Transações: rolar até o fim carrega todas as páginas (total igual ao do web); filtros e busca; detalhe com linha do tempo.
 - [ ] Modo avião: erro com "Tentar novamente"; voltar a rede e tentar de novo recupera.
 - [ ] Sair da conta volta ao login e o token deixa de funcionar.
+- [ ] Push: após o login o Android pede permissão; uma venda que zera um produto (POS da demo) gera "Estoque zerado" com o app fechado; tocar abre o Início na organização certa. Desligar o switch na Conta para de receber; religar volta.
 - [ ] Fonte do sistema em tamanho grande: textos não cortados; TalkBack lê KPIs, linhas e filtros.
 
 ## Estrutura
@@ -101,6 +124,7 @@ app/          rotas (Expo Router)
 src/api/      client HTTP (Bearer, X-Organization-Id, ApiError), endpoints tipados, QueryClient
 src/features/ componentes e hooks por domínio (dashboard, transactions)
 src/lib/      datas por timezone, períodos, dinheiro, comparações
+src/push/     registro do push token, preferência do aparelho e navegação ao tocar no aviso
 src/session/  sessão e SecureStore
 src/ui/       tema e componentes base
 test/         setup do Jest, servidor MSW e helpers
