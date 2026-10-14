@@ -17,6 +17,7 @@ const { openDrawer } = useSidebar()
     </UiButton>
     <AppBreadcrumbs class="flex-1" />
     <div class="flex shrink-0 items-center gap-2">
+      <RealtimeIndicator />
       <OrganizationSwitcher class="max-md:hidden" />
       <UserMenu />
     </div>
