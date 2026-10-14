@@ -13,6 +13,7 @@ const ORG = {
   currency: 'BRL',
   timezone: 'America/Sao_Paulo',
   insights: { available: false, enabled: false },
+  daily_revenue_goal: null,
   role: 'owner' as const,
 }
 

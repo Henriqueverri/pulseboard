@@ -17,6 +17,10 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+# Firebase service account key (FCM): goes to EAS via `eas credentials`, never to Git
+*-firebase-adminsdk-*.json
+google-service-account*.json
+google-services.json
 
 # Metro
 .metro-health-check*

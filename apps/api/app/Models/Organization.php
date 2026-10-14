@@ -47,6 +47,7 @@ class Organization extends Model
     {
         return [
             'ai_insights_enabled_at' => 'datetime',
+            'daily_revenue_goal' => 'decimal:2',
         ];
     }
 

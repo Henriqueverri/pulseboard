@@ -1,11 +1,15 @@
 import { Tabs } from 'expo-router/tabs';
 
+import { useNotificationNavigation } from '@/push/useNotificationNavigation';
+import { usePushRegistration } from '@/push/usePushRegistration';
 import { useOrganizationChannel } from '@/realtime/useOrganizationChannel';
 import { useActiveOrganization } from '@/session/SessionProvider';
 import { colors, typography } from '@/ui/theme';
 
 export default function AppLayout() {
   useOrganizationChannel(useActiveOrganization().id);
+  usePushRegistration();
+  useNotificationNavigation();
 
   return (
     <Tabs

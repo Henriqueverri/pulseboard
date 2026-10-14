@@ -27,6 +27,8 @@ class OrganizationResource extends JsonResource
                 'available' => (bool) config('ai.enabled'),
                 'enabled' => $this->insightsEnabled(),
             ],
+            // Decimal string; null when no goal is set. Reaching it pushes an alert to the app.
+            'daily_revenue_goal' => $this->daily_revenue_goal,
             'role' => $this->when(
                 isset($this->pivot?->role),
                 fn () => $this->pivot->role,

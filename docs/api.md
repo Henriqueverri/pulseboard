@@ -161,6 +161,43 @@ Sem servidor de tempo real (`BROADCAST_CONNECTION` diferente de `reverb`, como n
 
 Os eventos saem depois da resposta HTTP e depois do commit: o integrador não espera pelo WebSocket, e uma falha no Reverb nunca muda o resultado da ingestão (só gera um `warning` `realtime.dispatch` no log).
 
+## Notificações push
+
+Os mesmos eventos do tempo real disparam avisos no celular dos membros da organização, pelo [Expo Push Service](https://docs.expo.dev/push-notifications/sending-notifications/):
+
+| Aviso | Quando | Título / corpo | Abre no app |
+|-------|--------|----------------|-------------|
+| `stock_low` | Produto controlado passa de normal para baixo | "Estoque baixo" / "Heineken Long Neck (3 un., mínimo 5)" | Início |
+| `stock_out` | Produto controlado zera (vindo de normal ou baixo) | "Estoque zerado" / "Heineken Long Neck está sem estoque." | Início |
+| `daily_goal_reached` | A receita paga do dia, no timezone da organização, alcança a meta | "Meta do dia batida" / "R$ 1.620,00 em vendas pagas hoje (meta de R$ 1.500,00)." | Transações |
+
+- **No máximo um aviso de cada tipo por dia local:** por produto no estoque, por organização na meta. A tabela `notification_events` tem unicidade `(organization_id, kind, dedupe_key)`, com `dedupe_key` = `{product_id}:{data}` ou `{data}`. O registro é gravado *antes* do envio (at-most-once): duas vendas simultâneas não geram dois avisos, e uma falha do Expo perde o aviso daquele dia em vez de repeti-lo.
+- O campo `data` da notificação leva `url`, `organization_id`, `kind` e, no estoque, `product_id`. O app só navega para rotas conhecidas.
+- O envio roda no mesmo `defer()` do tempo real, depois da resposta da ingestão; uma falha do Reverb não impede o push, e vice-versa. Cada aviso gera uma linha `push.notify` no log (`outcome` `sent`, `failed` ou `no_devices`).
+
+**`POST /api/v1/devices/push-token`** — só com PAT (o app), sem `X-Organization-Id`, throttle de 30 por minuto. O dispositivo recebe os avisos de todas as organizações do usuário.
+
+| Campo | Regra |
+|-------|-------|
+| `token` | obrigatório, formato `ExponentPushToken[…]` (ou `ExpoPushToken[…]`) |
+| `platform` | obrigatório, `android` ou `ios` |
+
+- 204, idempotente: registrar de novo atualiza `last_seen_at`. Um token que estava com outro usuário (outra pessoa logou no aparelho) passa para o atual.
+- O dispositivo fica preso ao token de acesso que o registrou: logout, expiração ou um novo login com o mesmo `device_name` removem o dispositivo junto com o token.
+- Com sessão web: 400 `{"message":"Push notifications require an access token (mobile app)."}`.
+
+**`DELETE /api/v1/devices/push-token`** — `{"token":"ExponentPushToken[…]"}`, 204. Remove só dispositivos do próprio usuário; um token desconhecido também responde 204.
+
+Tokens que o Expo responde como `DeviceNotRegistered` (app desinstalado) são apagados no envio.
+
+**`PUT /api/v1/organization/notifications`** — com `X-Organization-Id`, só owner (403 para member). Define a meta diária de receita paga:
+
+| Campo | Regra |
+|-------|-------|
+| `daily_revenue_goal` | presente; `null` remove a meta; senão número com até 2 casas decimais, entre `0.01` e `9999999999.99`, na moeda da organização |
+
+Resposta 200 `{"organization": {…, "daily_revenue_goal": "1500.00"}}`, no formato de `/auth/me`, onde o campo também aparece.
+
 ## Products e Customers
 
 Rotas de domínio exigem autenticação (sessão ou PAT) + `X-Organization-Id` de uma organização da qual o usuário é membro.

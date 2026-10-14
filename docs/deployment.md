@@ -92,6 +92,8 @@ Nenhum valor real vai para o Git. No `render.yaml`, os secrets (`APP_KEY`, `DB_U
 | `REVERB_APP_ID` / `REVERB_APP_KEY` | `pulseboard` / `pulseboard-live` — públicos: os clientes leem a chave em `GET /realtime` |
 | `REVERB_APP_SECRET` | `generateValue` — assina as autorizações de canal e as publicações |
 | `REVERB_ALLOWED_ORIGINS` | `app.henriqueverri.dev,api.henriqueverri.dev` (o app React Native envia como origem o host do próprio socket) |
+| `PUSH_DRIVER` | `expo` (notificações push pelo Expo Push Service; `fake` só registra no log, como nos testes) |
+| `EXPO_ACCESS_TOKEN` | secret, opcional — exigido só se o *Enhanced Security for Push Notifications* estiver ligado no projeto Expo |
 | `DB_CONNECTION` | `pgsql` |
 | `DB_URL` | secret — connection string do Session pooler (ver acima) |
 | `DB_SSLMODE` | `require` |

@@ -37,5 +37,6 @@
         <env name="AI_ENABLED" value="false"/>
         <env name="AI_PROVIDER" value="scripted"/>
         <env name="OPENAI_API_KEY" value=""/>
+        <env name="PUSH_DRIVER" value="fake"/>
     </php>
 </phpunit>

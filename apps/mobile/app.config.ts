@@ -27,10 +27,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       monochromeImage: './assets/android-icon-monochrome.png',
     },
     predictiveBackGestureEnabled: false,
+    // EAS file variable with the Firebase google-services.json: without it the APK gets no push token.
+    googleServicesFile: process.env.GOOGLE_SERVICES_JSON,
   },
   plugins: [
     'expo-router',
     'expo-secure-store',
+    // The app creates the `alerts` channel before asking for permission; the API sends to it.
+    ['expo-notifications', { icon: './assets/notification-icon.png', color: BRAND, defaultChannel: 'alerts' }],
     ['expo-splash-screen', { image: './assets/splash-icon.png', imageWidth: 160, backgroundColor: BACKGROUND }],
   ],
   experiments: {
