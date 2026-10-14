@@ -1,4 +1,5 @@
-# Production image for Render: Nginx + PHP-FPM in one container, app in /var/www/html.
+# Production image for Render: Nginx + PHP-FPM (+ Reverb) in one container, app in /var/www/html.
+# pcntl: `reverb:start` traps SIGINT/SIGTERM.
 # Build context: apps/api. Configuration comes only from environment variables at runtime.
 
 FROM php:8.4-fpm-alpine AS base
@@ -7,7 +8,7 @@ FROM php:8.4-fpm-alpine AS base
 # hadolint ignore=DL3018,SC2086
 RUN apk add --no-cache bash nginx libpq \
     && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS postgresql-dev \
-    && docker-php-ext-install -j"$(nproc)" pdo_pgsql opcache \
+    && docker-php-ext-install -j"$(nproc)" pdo_pgsql opcache pcntl \
     && apk del .build-deps \
     && rm -f /usr/local/etc/php-fpm.d/*.conf \
     && rm -rf /var/www/html/*
