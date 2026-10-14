@@ -15,6 +15,9 @@ use App\Policies\TransactionPolicy;
 use App\Services\Ai\Fake\ScriptedLlmClient;
 use App\Services\Ai\LlmClient;
 use App\Services\Ai\OpenAi\OpenAiResponsesClient;
+use App\Services\Push\ExpoPushClient;
+use App\Services\Push\FakePushClient;
+use App\Services\Push\PushClient;
 use App\Support\CurrentOrganization;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -41,6 +44,18 @@ class AppServiceProvider extends ServiceProvider
                 connectTimeoutSeconds: (int) config('ai.connect_timeout_seconds'),
                 retries: (int) config('ai.retries'),
                 retryDelayMs: (int) config('ai.retry_delay_ms'),
+            ),
+        });
+
+        // A singleton, so a test (or the fake's log) sees every message of the request.
+        $this->app->singleton(PushClient::class, fn (): PushClient => match (config('push.driver')) {
+            'fake' => new FakePushClient,
+            default => new ExpoPushClient(
+                url: (string) config('services.expo.push_url'),
+                accessToken: config('services.expo.access_token') ?: null,
+                androidChannelId: (string) config('push.android_channel_id'),
+                timeoutSeconds: (int) config('push.timeout_seconds'),
+                connectTimeoutSeconds: (int) config('push.connect_timeout_seconds'),
             ),
         });
     }

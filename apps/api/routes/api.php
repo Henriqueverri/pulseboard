@@ -16,7 +16,9 @@ use App\Http\Controllers\Api\Ingest\IngestTransactionController;
 use App\Http\Controllers\Api\Insights\PeriodSummaryController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\OrganizationInsightsController;
+use App\Http\Controllers\Api\OrganizationNotificationsController;
 use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\Api\PushDeviceController;
 use App\Http\Controllers\Api\RealtimeController;
 use App\Http\Controllers\Api\TransactionController;
 use Illuminate\Support\Facades\Route;
@@ -42,9 +44,16 @@ Route::prefix('v1')->group(function (): void {
 
     Route::get('/realtime', RealtimeController::class)->middleware('auth:sanctum');
 
+    // Per user, not per organization: a device gets the alerts of every organization of its user.
+    Route::prefix('devices')->middleware(['auth:sanctum', 'throttle:30,1'])->group(function (): void {
+        Route::post('/push-token', [PushDeviceController::class, 'store']);
+        Route::delete('/push-token', [PushDeviceController::class, 'destroy']);
+    });
+
     Route::middleware(['auth:sanctum', 'organization'])->group(function (): void {
         Route::get('/organization', [OrganizationController::class, 'show']);
         Route::put('/organization/insights', [OrganizationInsightsController::class, 'update']);
+        Route::put('/organization/notifications', [OrganizationNotificationsController::class, 'update']);
         Route::get('/dashboard', DashboardController::class);
 
         Route::prefix('analytics')->group(function (): void {

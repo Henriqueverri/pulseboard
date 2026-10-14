@@ -71,6 +71,12 @@ services:
       # The web SPA, plus the API host: React Native sends the socket's own origin.
       - key: REVERB_ALLOWED_ORIGINS
         value: app.henriqueverri.dev,api.henriqueverri.dev
+      # Push alerts to the mobile app through the Expo Push API, after the ingestion response.
+      - key: PUSH_DRIVER
+        value: expo
+      # Optional: only once "enhanced push security" is enabled in the EAS dashboard.
+      - key: EXPO_ACCESS_TOKEN
+        sync: false
       # One connection per PHP-FPM worker (pm.max_children = 5), reused across requests.
       - key: DB_PERSISTENT
         value: "true"
