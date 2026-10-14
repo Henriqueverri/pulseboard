@@ -6,10 +6,10 @@ Como o PulseBoard roda em produção e como operar a demo. Visão geral no [READ
 
 ```text
 Cloudflare Pages (SPA estática)          app.henriqueverri.dev
-        │  fetch com cookies (Sanctum SPA)
+        │  fetch com cookies (Sanctum SPA) + WebSocket (wss://…/app)
         ▼
 Render Web Service (Free, Docker)        api.henriqueverri.dev
-  Nginx + PHP-FPM
+  Nginx + PHP-FPM + Reverb (127.0.0.1:8080)
         │  Supabase Shared Pooler, Session mode (5432), TLS
         ▼
 Supabase PostgreSQL
@@ -48,9 +48,9 @@ O Render Free não tem Pre-Deploy Command nem Shell, então migrations e demo ro
 
 1. `php artisan optimize` — cache de config, rotas, eventos e views, gerado no runtime (as variáveis não existem no build);
 2. `php artisan pulseboard:release` — `migrate --force`, `pulseboard:demo` e `pulseboard:ai-prune` (retenção dos dados de IA, ver [Insights](#insights-custo-cotas-e-retenção)), segurando um advisory lock do PostgreSQL: se dois containers sobem ao mesmo tempo (restart durante um deploy), o segundo espera e encontra tudo pronto;
-3. PHP-FPM + Nginx na porta `$PORT` (o Render define; padrão 10000).
+3. PHP-FPM + Nginx na porta `$PORT` (o Render define; padrão 10000) e, com `BROADCAST_CONNECTION=reverb`, o Reverb em `127.0.0.1:8080`. O Nginx repassa `/app` (WebSocket) ao Reverb; a API publica nele direto, porque o entrypoint aponta `REVERB_HOST`/`PORT`/`SCHEME` para o Reverb local. Se qualquer dos três processos cair, o container sai e o Render o reinicia.
 
-Qualquer falha nesses passos (banco inacessível, migration quebrada, `DEMO_PASSWORD` ausente ou curta, retenção de IA inválida) derruba o container antes de ele aceitar tráfego; num deploy, o Render mantém a versão anterior no ar. O Free hiberna o serviço após ~15 min sem requisições: o primeiro acesso depois disso espera o container subir de novo (e repetir os passos acima, que são idempotentes).
+Qualquer falha nesses passos (banco inacessível, migration quebrada, `DEMO_PASSWORD` ausente ou curta, retenção de IA inválida, `REVERB_APP_*` ausente com `BROADCAST_CONNECTION=reverb`) derruba o container antes de ele aceitar tráfego; num deploy, o Render mantém a versão anterior no ar. O Free hiberna o serviço após ~15 min sem requisições: o primeiro acesso depois disso espera o container subir de novo (e repetir os passos acima, que são idempotentes).
 
 A imagem (Alpine, PHP 8.4-FPM com OPcache, Nginx, dependências `--no-dev`, usuário `www-data`, nenhum `.env` embutido) está descrita no [README da API](../apps/api/README.md#imagem-de-produção).
 
@@ -66,12 +66,12 @@ postgresql://postgres.<project-ref>:<senha-url-encoded>@aws-0-<região>.pooler.s
 - **Não** use o Transaction mode (porta 6543): o PDO usa prepared statements no servidor e o `pulseboard:release` usa advisory lock de sessão; os dois exigem Session mode.
 - Caracteres especiais da senha precisam de URL-encoding (`@` → `%40`, `:` → `%3A`, `/` → `%2F`).
 - `DB_SSLMODE=require` força TLS na conexão.
-- O pool do Shared Pooler é pequeno; o PHP-FPM usa no máximo 5 workers (uma conexão cada).
+- O pool do Shared Pooler é pequeno; o PHP-FPM usa no máximo 5 workers (uma conexão cada). O Reverb não abre conexão com o banco: a autorização dos canais passa pelo PHP-FPM.
 - No plano Free do Supabase o projeto pausa após alguns dias sem atividade; com o banco pausado o health check responde 503 e o deploy falha até reativá-lo no painel.
 
 ## Variáveis de ambiente
 
-Nenhum valor real vai para o Git. No `render.yaml`, os secrets (`APP_KEY`, `DB_URL`, `DEMO_PASSWORD`, `DEMO_INTEGRATION_KEY`, `OPENAI_API_KEY`) usam `sync: false`: o Render pede os valores ao criar o Blueprint.
+Nenhum valor real vai para o Git. No `render.yaml`, os secrets (`APP_KEY`, `DB_URL`, `DEMO_PASSWORD`, `DEMO_INTEGRATION_KEY`, `OPENAI_API_KEY`) usam `sync: false`: o Render pede os valores ao criar o Blueprint. O `REVERB_APP_SECRET` usa `generateValue: true`: o Render gera o valor uma vez e ninguém precisa conhecê-lo.
 
 | Variável | Valor |
 |----------|-------|
@@ -88,6 +88,10 @@ Nenhum valor real vai para o Git. No `render.yaml`, os secrets (`APP_KEY`, `DB_U
 | `SESSION_SAME_SITE` | `lax` |
 | `CACHE_STORE` | `database` (tabelas criadas pelas migrations; sem Redis) |
 | `QUEUE_CONNECTION` | `database` (nenhum job é despachado; sem worker) |
+| `BROADCAST_CONNECTION` | `reverb` (tempo real; qualquer outro valor desliga o Reverb e `GET /realtime` responde `enabled: false`) |
+| `REVERB_APP_ID` / `REVERB_APP_KEY` | `pulseboard` / `pulseboard-live` — públicos: os clientes leem a chave em `GET /realtime` |
+| `REVERB_APP_SECRET` | `generateValue` — assina as autorizações de canal e as publicações |
+| `REVERB_ALLOWED_ORIGINS` | `app.henriqueverri.dev,api.henriqueverri.dev` (o app React Native envia como origem o host do próprio socket) |
 | `DB_CONNECTION` | `pgsql` |
 | `DB_URL` | secret — connection string do Session pooler (ver acima) |
 | `DB_SSLMODE` | `require` |
@@ -104,7 +108,7 @@ Nenhum valor real vai para o Git. No `render.yaml`, os secrets (`APP_KEY`, `DB_U
 | `AI_MONTHLY_BUDGET_USD` | `2` — teto global do custo estimado no mês (UTC) |
 | `AI_DEMO_DAILY_IP_LIMIT` | `5` — gerações por IP por dia na organização de demo |
 
-`PORT` é definida pelo próprio Render. Localmente, os modelos são [`apps/api/.env.example`](../apps/api/.env.example) e [`apps/web/.env.example`](../apps/web/.env.example).
+`PORT` é definida pelo próprio Render. O endereço público do WebSocket sai do `APP_URL` (`api.henriqueverri.dev:443`, https); `REVERB_PUBLIC_HOST`/`PORT`/`SCHEME` só são necessários quando o Reverb não está atrás do mesmo host, como no desenvolvimento local (`php artisan reverb:start` na porta 8085, `REVERB_PUBLIC_PORT=8085`). Localmente, os modelos são [`apps/api/.env.example`](../apps/api/.env.example) e [`apps/web/.env.example`](../apps/web/.env.example).
 
 Nenhuma API Key de integração é configurada no deploy: elas são criadas pelos owners na UI e só o hash fica no banco.
 
@@ -121,6 +125,7 @@ Com `LOG_STDERR_FORMATTER`, cada linha no painel do Render é um objeto JSON, fi
 | `ingest.transaction` | Cada `POST /ingest/transactions` | `outcome` (`created`, `replayed`, `conflict`, `rejected`, `failed`), `code`, `external_id`, `api_key_prefix`, `duration_ms` |
 | `ingest.status_change` | Cada mudança de status | `outcome` (`transitioned`, `replayed`, `conflict`, `not_found`, `rejected`, `failed`), `requested_status`, `code` |
 | `ingest.auth_failed` | Chave recusada (`warning`) | `reason` (`missing`, `malformed`, `unknown`, `wrong_secret`, `revoked`, `expired`), `api_key_prefix` quando parseável |
+| `realtime.dispatch` | Evento de tempo real não publicado (`warning`; a ingestão já respondeu) | `domain_event`, `organization_id`, `error_type` |
 
 Para investigar um problema de integração, peça o `X-Request-Id` ou o `external_id` ao integrador e busque por ele nos logs; a transação também aparece na busca da tela de Transações pelo `external_id`, com a linha do tempo de status. A chave, o header `Authorization`, o hash e os dados pessoais do cliente nunca são logados.
 

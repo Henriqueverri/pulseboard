@@ -34,7 +34,8 @@ vendor/bin/pint --test
 | `bootstrap/app.php` | Middleware, rate limit e erros em JSON para `api/*` (com `code` na ingestão) |
 | `config/trustedproxy.php` | `TRUSTED_PROXIES` para rodar atrás do proxy do Render |
 | `app/Console/Commands` | `pulseboard:demo` (organização de demonstração), `pulseboard:release` (start do container), `pulseboard:ai-eval` (avaliação de IA), `pulseboard:ai-prune` (retenção de IA) e `pulseboard:ai-usage` (uso e custo de IA) |
-| `Dockerfile`, `docker/` | Imagem de produção: Nginx + PHP-FPM, entrypoint, configs de PHP |
+| `Dockerfile`, `docker/` | Imagem de produção: Nginx + PHP-FPM + Reverb, entrypoint, configs de PHP |
+| `app/Events`, `routes/channels.php` | Eventos de tempo real (`DomainEvents`, publicados depois da resposta) e a autorização do canal `private-organization.{id}` |
 
 Health check: `GET /api/v1/health` (banco) e `GET /up` (padrão do Laravel, sem banco).
 
@@ -45,11 +46,11 @@ docker build -t pulseboard-api .
 docker run --rm -p 10000:10000 --env-file prod.env pulseboard-api   # prod.env fora do Git
 ```
 
-Alpine com PHP 8.4-FPM (`pdo_pgsql`, OPcache sem revalidação), Nginx e dependências `--no-dev`. Roda como `www-data`; nada de `.env` na imagem, toda a configuração vem de variáveis de ambiente. O entrypoint (`docker/entrypoint.sh`):
+Alpine com PHP 8.4-FPM (`pdo_pgsql`, OPcache sem revalidação, `pcntl` para os sinais do Reverb), Nginx e dependências `--no-dev`. Roda como `www-data`; nada de `.env` na imagem, toda a configuração vem de variáveis de ambiente. O entrypoint (`docker/entrypoint.sh`):
 
-1. valida `PORT` e `APP_KEY` e garante que `storage/` e `bootstrap/cache/` são graváveis;
+1. valida `PORT` e `APP_KEY` (e `REVERB_APP_*` com `BROADCAST_CONNECTION=reverb`) e garante que `storage/` e `bootstrap/cache/` são graváveis;
 2. `php artisan optimize` (cache de config, rotas, eventos e views, com as variáveis do runtime);
 3. `php artisan pulseboard:release`: `migrate --force`, `pulseboard:demo` e `pulseboard:ai-prune`, sob um advisory lock do PostgreSQL (dois containers subindo juntos rodam um depois do outro);
-4. sobe PHP-FPM (`127.0.0.1:9000`) e Nginx (porta `$PORT`), e encerra o container se qualquer um cair.
+4. sobe PHP-FPM (`127.0.0.1:9000`), Nginx (porta `$PORT`, com `/app` repassado ao WebSocket) e, com `BROADCAST_CONNECTION=reverb`, o Reverb (`127.0.0.1:8080`); encerra o container se qualquer um cair.
 
 Se algum passo falhar (por exemplo `DEMO_PASSWORD` ausente ou curta, ou banco inacessível), o container sai com erro e o Render mantém o deploy anterior no ar. Detalhes do deploy em [`docs/deployment.md`](../../docs/deployment.md).

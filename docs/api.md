@@ -10,6 +10,7 @@ A API tem duas superfícies com autenticações separadas:
 Seções:
 
 - [Autenticação](#autenticação) · [Web (sessão)](#web-sanctum-spa) · [Clientes nativos (token)](#clientes-nativos-personal-access-token)
+- [Tempo real](#tempo-real)
 - [Products e Customers](#products-e-customers)
 - [Transactions](#transactions)
 - [API Keys](#api-keys)
@@ -111,6 +112,54 @@ curl -s -o /dev/null -w '%{http_code}\n' "$API/dashboard" -H 'Accept: applicatio
 ```
 
 O `pulseboard:demo --refresh` apaga os tokens das contas da demo (compartilhadas): os dispositivos fazem login de novo.
+
+## Tempo real
+
+Vendas, mudanças de status e movimentos de estoque são anunciados por WebSocket ([Laravel Reverb](https://reverb.laravel.com), protocolo Pusher) num canal privado por organização. O canal só avisa que algo mudou: os números continuam vindo dos endpoints REST, que os clientes recarregam ao receber um evento.
+
+**`GET /api/v1/realtime`** — autenticada (sessão ou PAT), sem `X-Organization-Id`. Diz ao cliente onde conectar, para que nem o build do web nem o do app carreguem configuração:
+
+```json
+{
+  "data": {
+    "enabled": true,
+    "key": "pulseboard-live",
+    "host": "api.henriqueverri.dev",
+    "port": 443,
+    "scheme": "https",
+    "auth_endpoint": "/api/v1/broadcasting/auth"
+  }
+}
+```
+
+Sem servidor de tempo real (`BROADCAST_CONNECTION` diferente de `reverb`, como na CI), a resposta é `{"data":{"enabled":false}}` e os clientes funcionam como antes. A `key` é pública por definição: só identifica o app no Reverb; quem assina é o segredo, que nunca sai do servidor.
+
+**Conexão:** `wss://api.henriqueverri.dev/app/{key}?protocol=7` (o Nginx do container repassa `/app` ao Reverb).
+
+**`POST /api/v1/broadcasting/auth`** — autoriza a assinatura de `private-organization.{organizationId}`, com a mesma credencial da API interna (cookie + CSRF no web, Bearer no app):
+
+| Campo | Regra |
+|-------|-------|
+| `socket_id` | obrigatório, enviado pelo servidor na conexão |
+| `channel_name` | `private-organization.{uuid}` |
+
+- 200 `{"auth":"<key>:<assinatura>"}` se o usuário é membro da organização.
+- 403 para outra organização, membership removida ou qualquer outro canal.
+- 401 sem credencial válida; a API Key de ingestão não serve aqui.
+
+**Eventos** (nome com ponto inicial no Echo, por exemplo `.listen('.transaction.recorded', …)`):
+
+| Evento | Quando | Payload |
+|--------|--------|---------|
+| `transaction.recorded` | Transação nova pela ingestão (um reenvio idêntico não anuncia) | `id`, `status`, `total_amount` (string decimal), `currency`, `occurred_at` |
+| `transaction.status-changed` | Transição aplicada pela ingestão (pedir o status atual não anuncia) | `id`, `from`, `to`, `total_amount`, `currency`, `occurred_at` |
+| `stock.changed` | Saldo aplicado (uma atualização mais antiga que a atual não anuncia) | `product_id`, `sku`, `name`, `tracked`, `quantity`, `min_quantity`, `status`, `previous_status` |
+
+```json
+{"event":"transaction.recorded","channel":"private-organization.01a13a77-…","data":"{\"id\":\"4f55cad8-…\",\"status\":\"paid\",\"total_amount\":\"12.34\",\"currency\":\"BRL\",\"occurred_at\":\"2026-10-14T12:55:46.000000Z\"}"}
+```
+
+Os eventos saem depois da resposta HTTP e depois do commit: o integrador não espera pelo WebSocket, e uma falha no Reverb nunca muda o resultado da ingestão (só gera um `warning` `realtime.dispatch` no log).
 
 ## Products e Customers
 
