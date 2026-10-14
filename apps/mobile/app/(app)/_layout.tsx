@@ -1,8 +1,12 @@
 import { Tabs } from 'expo-router/tabs';
 
+import { useOrganizationChannel } from '@/realtime/useOrganizationChannel';
+import { useActiveOrganization } from '@/session/SessionProvider';
 import { colors, typography } from '@/ui/theme';
 
 export default function AppLayout() {
+  useOrganizationChannel(useActiveOrganization().id);
+
   return (
     <Tabs
       screenOptions={{

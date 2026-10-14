@@ -32,7 +32,7 @@ O PulseBoard faz parte de um ecossistema em produção: um ponto de venda indepe
 | **PulseBoard POS** (caixa) | Spring Boot, React | [pos.henriqueverri.dev](https://pos.henriqueverri.dev) | `caixa@pos.example` | `PosCaixa2026!` |
 | **PulseBoard POS** (admin) | Spring Boot, React | [pos.henriqueverri.dev](https://pos.henriqueverri.dev) | `admin@pos.example` | `PosAdmin2026!` |
 
-1. No **POS**, entre como caixa e faça uma venda paga com Pix.
+1. No **POS**, entre como caixa e faça uma venda paga com Pix. Com o dashboard do **PulseBoard Web** aberto ao lado, a venda aparece sozinha em cerca de um segundo, com o aviso "Nova venda".
 2. No **PulseBoard Web**, abra **Transações** e busque `pos:`: a venda chegou pela integração, com itens e linha do tempo de status. Em **Integração → API Keys**, a chave `PulseBoard POS` aparece como gerenciada.
 3. No **app**, o dashboard já inclui a venda (puxe para atualizar).
 4. No POS, entre como admin e estorne o pedido: a transação passa a "Estornado" no web e no app.
@@ -73,6 +73,7 @@ Uma aplicação para acompanhar a operação comercial de um negócio: *quanto v
 - **Estoque** — o sistema integrado informa o saldo de cada produto; o dashboard (web e app) mostra os itens baixos ou zerados e quantos dias o saldo dura no ritmo de venda dos últimos 28 dias.
 - **Transações** — histórico de vendas com itens, preço no momento da venda, origem (demo ou integração) e linha do tempo de status; na UI é somente leitura.
 - **Dashboard e analytics** — receita, pedidos, ticket médio e clientes (ativos, novos e recorrentes), receita por dia/semana/mês, rankings e distribuição por status, sempre com o período anterior ao lado.
+- **Tempo real** — vendas, mudanças de status e estoque chegam por WebSocket: as telas abertas no web e no app se atualizam sozinhas, com indicador "Ao vivo" e aviso de nova venda.
 - **Estado na URL** — período, filtros, ordenação e paginação ficam na query string: links compartilháveis, voltar/avançar funcionam.
 
 ## Destaques técnicos
@@ -125,13 +126,17 @@ Na API de ingestão, a organização vem exclusivamente da API Key. Testes dedic
 
 O banco guarda UTC; o calendário de negócio é o fuso IANA da organização (`organizations.timezone`) e o cliente nunca escolhe a timezone. Os limites de período são calculados na aplicação e convertidos para UTC; os buckets de dia, semana ISO e mês são agrupados no fuso local pelo PostgreSQL (`AT TIME ZONE`), com horário de verão correto — testado na CI. Uma venda em `2026-09-01T02:59:59Z` pertence a 31/08 em `America/Sao_Paulo`, e o front calcula "hoje" e os presets no mesmo fuso.
 
+### Tempo real
+
+Laravel Reverb roda no mesmo container da API, atrás do Nginx, sem serviço extra nem Redis. Cada organização tem um canal privado, autorizado pelo mesmo Sanctum (cookie no web, Bearer no app). Os eventos saem depois da resposta da ingestão, então o integrador nunca espera nem falha por causa do WebSocket. Eles só avisam que algo mudou: web e app agrupam a rajada de uma venda (transação e baixas de estoque) e recarregam os mesmos endpoints REST uma vez. Decisões em [`docs/architecture.md`](docs/architecture.md#tempo-real).
+
 ### Testes
 
 | Suíte | Ferramenta | O que cobre |
 |-------|-----------|-------------|
-| API | PHPUnit — 864 testes | Auth, isolamento entre organizações, CRUD e regras de exclusão, analytics com dados controlados e sobre o dataset de demo, orçamento de consultas, timezone e horário de verão, API Keys, ingestão (validação, idempotência, lifecycle, concorrência real, orçamento de queries, logs), estoque (atualizações fora de ordem, dias de cobertura), trusted proxies, comandos de release e demo |
-| Web | Vitest + @nuxt/test-utils — 242 testes | Utilitários (dinheiro, datas, períodos, erros), `useApiClient` (CSRF, 419, 401, `Retry-After`, `X-Request-Id`), store de sessão, composables e páginas com fixtures no formato real da API, linha do tempo de status e o segredo da API Key exibido uma única vez |
-| Mobile | Jest (`jest-expo`) + Testing Library + MSW — 84 testes | Client HTTP (Bearer, `X-Organization-Id`, 401/403, `Retry-After`, `X-Request-Id`), SecureStore, datas e períodos no timezone da organização (inclusive horário de verão), e fluxos com Expo Router: login, restauração e expiração da sessão, troca de organização, dashboard com o card de estoque e transações (paginação, filtros, detalhe e linha do tempo) |
+| API | PHPUnit — 880 testes | Auth, isolamento entre organizações, CRUD e regras de exclusão, analytics com dados controlados e sobre o dataset de demo, orçamento de consultas, timezone e horário de verão, API Keys, ingestão (validação, idempotência, lifecycle, concorrência real, orçamento de queries, logs), estoque (atualizações fora de ordem, dias de cobertura), tempo real (autorização do canal por organização, eventos só do que mudou, falha no broadcast sem afetar a ingestão), trusted proxies, comandos de release e demo |
+| Web | Vitest + @nuxt/test-utils — 267 testes | Utilitários (dinheiro, datas, períodos, erros), `useApiClient` (CSRF, 419, 401, `Retry-After`, `X-Request-Id`), store de sessão, composables e páginas com fixtures no formato real da API, linha do tempo de status, o segredo da API Key exibido uma única vez e o canal de tempo real (refetch agrupado, troca de organização, reconexão) |
+| Mobile | Jest (`jest-expo`) + Testing Library + MSW — 91 testes | Client HTTP (Bearer, `X-Organization-Id`, 401/403, `Retry-After`, `X-Request-Id`), SecureStore, datas e períodos no timezone da organização (inclusive horário de verão), tempo real só em primeiro plano, e fluxos com Expo Router: login, restauração e expiração da sessão, troca de organização, dashboard com o card de estoque e transações (paginação, filtros, detalhe e linha do tempo) |
 | E2E | Playwright + axe | Smoke do fluxo principal e fluxo de integração (criar chave na UI → ingerir → achar pelo ID externo → revogar → 401), contra o build de produção e um PostgreSQL descartável |
 
 Localmente a suíte da API roda em SQLite (10 testes de horário de verão e de concorrência ficam de fora); na CI roda inteira em PostgreSQL. Como rodar: [`docs/testing.md`](docs/testing.md).

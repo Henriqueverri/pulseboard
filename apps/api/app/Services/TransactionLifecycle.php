@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Data\Ingestion\StatusTransitionResult;
 use App\Enums\TransactionStatus;
+use App\Events\DomainEvents;
+use App\Events\TransactionStatusChanged;
 use App\Exceptions\IngestionException;
 use App\Models\ApiKey;
 use App\Models\Organization;
@@ -20,6 +22,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class TransactionLifecycle
 {
+    public function __construct(private readonly DomainEvents $events) {}
+
     public function transition(
         Organization $organization,
         ?ApiKey $apiKey,
@@ -40,7 +44,7 @@ final class TransactionLifecycle
             $from = $transaction->status;
 
             if ($from === $to) {
-                return new StatusTransitionResult($transaction, false);
+                return new StatusTransitionResult($transaction, false, $from);
             }
 
             $this->guardTransition($from, $to);
@@ -57,12 +61,22 @@ final class TransactionLifecycle
                 'api_key_id' => $apiKey?->id,
             ]);
 
-            return new StatusTransitionResult($transaction, true);
+            return new StatusTransitionResult($transaction, true, $from);
         });
+
+        if ($result->applied) {
+            $this->events->dispatch(TransactionStatusChanged::of(
+                $result->transaction,
+                $result->from,
+                $organization->currency,
+                $occurredAt,
+            ));
+        }
 
         return new StatusTransitionResult(
             $this->loadForResponse($result->transaction, $organization),
             $result->applied,
+            $result->from,
         );
     }
 

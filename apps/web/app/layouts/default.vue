@@ -3,6 +3,8 @@ const { collapsed, drawerOpen, closeDrawer } = useSidebar()
 const route = useRoute()
 
 watch(() => route.fullPath, closeDrawer)
+
+useOrganizationChannel()
 </script>
 
 <template>

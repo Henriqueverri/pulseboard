@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\Insights\PeriodSummaryController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\OrganizationInsightsController;
 use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\Api\RealtimeController;
 use App\Http\Controllers\Api\TransactionController;
 use Illuminate\Support\Facades\Route;
 
@@ -38,6 +39,8 @@ Route::prefix('v1')->group(function (): void {
             Route::delete('/tokens/current', [AuthController::class, 'revokeCurrentToken']);
         });
     });
+
+    Route::get('/realtime', RealtimeController::class)->middleware('auth:sanctum');
 
     Route::middleware(['auth:sanctum', 'organization'])->group(function (): void {
         Route::get('/organization', [OrganizationController::class, 'show']);

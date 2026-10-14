@@ -6,6 +6,8 @@ use App\Data\Ingestion\IngestionResult;
 use App\Data\Ingestion\IngestTransactionData;
 use App\Data\Ingestion\IngestTransactionItemData;
 use App\Enums\TransactionSource;
+use App\Events\DomainEvents;
+use App\Events\TransactionRecorded;
 use App\Exceptions\IngestionException;
 use App\Models\ApiKey;
 use App\Models\Customer;
@@ -22,7 +24,10 @@ final class TransactionIngestionService
 {
     private const MAX_MONEY_CENTS = 999_999_999_999;
 
-    public function __construct(private readonly TransactionFingerprint $fingerprint) {}
+    public function __construct(
+        private readonly TransactionFingerprint $fingerprint,
+        private readonly DomainEvents $events,
+    ) {}
 
     public function ingest(
         Organization $organization,
@@ -53,6 +58,7 @@ final class TransactionIngestionService
         }
 
         $transaction = Transaction::query()->findOrFail($transactionId);
+        $this->events->dispatch(TransactionRecorded::of($transaction, $organization->currency));
 
         return new IngestionResult($this->loadForResponse($transaction, $organization), false);
     }

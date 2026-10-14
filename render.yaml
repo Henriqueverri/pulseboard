@@ -57,6 +57,20 @@ services:
         sync: false
       - key: DB_SSLMODE
         value: require
+      # Realtime: the entrypoint starts Reverb on 127.0.0.1:8080 (and points REVERB_HOST/PORT/SCHEME
+      # at it), Nginx proxies wss://api.henriqueverri.dev/app to it. ID and key are public (clients
+      # read them from GET /api/v1/realtime); only the secret signs.
+      - key: BROADCAST_CONNECTION
+        value: reverb
+      - key: REVERB_APP_ID
+        value: pulseboard
+      - key: REVERB_APP_KEY
+        value: pulseboard-live
+      - key: REVERB_APP_SECRET
+        generateValue: true
+      # The web SPA, plus the API host: React Native sends the socket's own origin.
+      - key: REVERB_ALLOWED_ORIGINS
+        value: app.henriqueverri.dev,api.henriqueverri.dev
       # One connection per PHP-FPM worker (pm.max_children = 5), reused across requests.
       - key: DB_PERSISTENT
         value: "true"

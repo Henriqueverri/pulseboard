@@ -177,3 +177,15 @@ export interface IssuedToken extends AuthProfile {
   token_type: 'Bearer';
   expires_at: IsoDateTime;
 }
+
+export interface EnabledRealtimeConfig {
+  enabled: true;
+  key: string;
+  host: string;
+  port: number;
+  scheme: 'http' | 'https';
+  auth_endpoint: string;
+}
+
+/** GET /realtime: where to open the WebSocket (Laravel Reverb, Pusher protocol). */
+export type RealtimeConfig = { enabled: false } | EnabledRealtimeConfig;

@@ -7,7 +7,8 @@ Este documento explica **por que** o PulseBoard é construído do jeito que é. 
 ```mermaid
 flowchart LR
   B[Navegador] --> W["Nuxt 4 SPA (estático)<br/>Cloudflare Pages"]
-  W -- "REST + cookie de sessão<br/>(Sanctum SPA, CSRF)" --> A["API Laravel 12<br/>Render · Docker"]
+  W -- "REST + cookie de sessão<br/>(Sanctum SPA, CSRF)" --> A["API Laravel 12 + Reverb<br/>Render · Docker"]
+  A -. "WebSocket: canal privado<br/>por organização" .-> W
   X["Sistema externo<br/>(loja, ERP)"] -- "POST /ingest/*<br/>Bearer API Key" --> A
   A --> D[("PostgreSQL<br/>Supabase")]
 ```
@@ -244,6 +245,24 @@ Uma transação é processada em poucos milissegundos, e o integrador precisa da
 - **Número fixo de consultas na criação,** independente do número de itens: chave, produtos num único `whereIn`, cliente, insert da transação, um insert multi-row dos itens e o status change. `IngestQueryBudgetTest` compara 1 e 100 itens.
 - **Limites:** 120 req/min por chave (rate limiter no cache em banco, 429 com `Retry-After`), 100 itens por transação, 2 MB de corpo no Nginx.
 
+## Tempo real
+
+Uma venda feita no POS aparece no dashboard aberto (web e app) cerca de um segundo depois, sem recarregar. Contrato em [`api.md`](api.md#tempo-real).
+
+```text
+ingestão ──commit──► resposta HTTP ──defer()──► evento ──► Reverb (127.0.0.1:8080) ──wss──► Echo no web / no app
+                                                                                             └─ 1 s depois: refetch
+```
+
+- **Reverb no mesmo container**, como terceiro processo ao lado de PHP-FPM e Nginx. O Nginx repassa `/app` (WebSocket) ao Reverb; a API publica direto em `127.0.0.1`. Nada novo para operar: sem Pusher, sem Redis, sem outro serviço no Render. Medido na imagem: o Reverb ocupa ~46 MB, e o container inteiro ocioso fica em ~44 MiB.
+- **O evento avisa, o REST responde.** O payload é pequeno (id, status, total) e o cliente recarrega os mesmos endpoints de sempre. Não existe uma segunda forma de calcular métricas no front, e um evento perdido só atrasa a tela até o próximo.
+- **Depois da resposta, nunca no caminho do integrador:** `ShouldBroadcastNow` dentro de `defer()`, que roda depois que a resposta foi enviada e a transação do banco foi confirmada. Uma falha no Reverb é capturada e vira um `warning` `realtime.dispatch` no log; a ingestão já respondeu 201. Sem fila, porque o Render Free não tem worker (ver [Síncrono, não assíncrono](#síncrono-não-assíncrono)).
+- **Só o que mudou de fato:** um reenvio idêntico, um status já aplicado ou um saldo mais antigo que o atual não geram evento. O `stock.changed` leva o status anterior, lido sob `lockForUpdate`, para o front avisar só quando um produto *entra* em baixo ou zerado.
+- **Canal privado por organização,** autorizado pelo mesmo Sanctum da API (cookie no web, Bearer no app) e pela membership. O `allowed_origins` do Reverb filtra navegadores, mas quem protege os dados é a autorização do canal.
+- **Configuração servida pela API** (`GET /realtime`): o host, a porta e a chave pública não entram no build do Cloudflare Pages nem no APK, e um ambiente sem Reverb responde `enabled: false`.
+- **Rajadas viram um refetch:** uma venda no POS gera a transação e uma baixa de estoque por item. Os clientes esperam 1 s sem eventos e recarregam uma vez: no web, `refreshNuxtData` só nas chaves da organização (dashboard, transações, analytics, produtos, clientes; Insights, que custam uma chamada de IA, ficam de fora); no app, `invalidateQueries(['org', id])`.
+- **Reconexão:** ao voltar de uma queda de conexão, os clientes recarregam uma vez, porque os eventos daquele intervalo se perderam. No app o socket só fica aberto em primeiro plano; ao voltar, reconecta, e o React Query já refaz as consultas no foco.
+
 ## Timezone
 
 "Hoje", "este mês" e "semana passada" dependem de onde o negócio está, não de onde o servidor roda.
@@ -272,6 +291,7 @@ página/componente → composable → repository → useApiClient
 ## Infraestrutura
 
 - **Sem Redis, filas ou workers:** nada é assíncrono hoje (inclusive a ingestão); sessão, cache e o rate limiter da ingestão ficam no banco. Menos peças para operar em planos gratuitos; o rate limiter é o primeiro ponto em que Redis passaria a se justificar com volume.
+- **Um container, três processos:** PHP-FPM, Nginx e Reverb, supervisionados pelo entrypoint. Se qualquer um cai, o container sai e o Render o reinicia; no deploy, cada um recebe o seu sinal de parada graciosa (`QUIT` para PHP-FPM e Nginx, `TERM` para o Reverb).
 - **Logs estruturados:** `stderr` em JSON, lidos no painel do Render; sem stack de observabilidade separada.
 - **Deploy pelas integrações nativas** das plataformas, sem workflow de deploy próprio: a CI valida, as plataformas publicam. A API só é publicada depois dos checks da CI.
 - **Migrations no start do container**, sob advisory lock do PostgreSQL (o Render Free não tem pre-deploy command). Se falhar, o container não sobe e a versão anterior continua no ar.
@@ -285,6 +305,8 @@ Detalhes operacionais em [`deployment.md`](deployment.md).
 - O período padrão (últimos 30 dias) inclui o dia de hoje, ainda incompleto.
 - Sem cache de analytics: cada requisição consulta o banco.
 - Um único ambiente (produção), sem staging.
+- Tempo real numa única instância do Reverb, com estado em memória: escalar a API horizontalmente exigiria o scaling via Redis do Reverb. Eventos enviados enquanto um cliente está desconectado não são reentregues; o cliente compensa recarregando ao reconectar.
+- O Render Free hiberna sem requisições HTTP; uma tela aberta só com o WebSocket pode não manter o serviço acordado.
 
 Trade-offs aceitos na ingestão:
 
